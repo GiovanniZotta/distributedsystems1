@@ -40,3 +40,20 @@ SERVER: **abort after a timeout**
 
 #### A server crashes during a 2-PC
 
+## Considerations
+
+### Private workspace and versions
+* When a client reads a value, if it is the first time for that value it reads the most recent committed value and the version is stored in the private workspace along with the item version. Otherwise, it is read from the private workspace.
+* The version is changed only on commit. The private workspaces are stored like:
+  ```
+  {
+    TXN_ID: 
+    {
+      ITEM_KEY: (VERSION, VALUE, CHANGED)
+    }
+  }
+  ```
+  where
+  * VERSION is the first version read/written
+  * VALUE is the last value read/written
+  * CHANGED is a boolean

@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
 
 public abstract class Node extends AbstractActor {
     protected int id;                           // node ID
-    protected List<ActorRef> participants;      // list of participant nodes
+    protected List<ActorRef> servers;      // list of participant nodes
     protected CoordinatorServerMessages.Decision decision = null;         // decision taken by this node
 
     public Node(int id) {
@@ -25,12 +25,12 @@ public abstract class Node extends AbstractActor {
     protected abstract void onRecovery(CoordinatorServerMessages.Recovery msg);
 
     void setGroup(CoordinatorServerMessages.StartMessage sm) {
-        participants = new ArrayList<>();
+        servers = new ArrayList<>();
         for (ActorRef b : sm.group) {
             if (!b.equals(getSelf())) {
 
                 // copying all participant refs except for self
-                this.participants.add(b);
+                this.servers.add(b);
             }
         }
         print("starting with " + sm.group.size() + " peer(s)");
@@ -59,13 +59,13 @@ public abstract class Node extends AbstractActor {
     }
 
     void multicast(Serializable m) {
-        for (ActorRef p : participants)
+        for (ActorRef p : servers)
             p.tell(m, getSelf());
     }
 
     // a multicast implementation that crashes after sending the first message
     void multicastAndCrash(Serializable m, int recoverIn) {
-        for (ActorRef p : participants) {
+        for (ActorRef p : servers) {
             p.tell(m, getSelf());
             crash(recoverIn);
             return;

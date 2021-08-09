@@ -25,6 +25,7 @@ public class Server extends Node {
                 .match(CoordinatorServerMessages.DecisionResponse.class, this::onDecisionResponse)
                 .match(CoordinatorServerMessages.Timeout.class, this::onTimeout)
                 .match(CoordinatorServerMessages.Recovery.class, this::onRecovery)
+                .match(CoordinatorServerMessages.TransactionRead.class, this::onTransactionRead)
                 .build();
     }
 
@@ -36,12 +37,12 @@ public class Server extends Node {
         this.coordinator = getSender();
         //if (id==2) {crash(5000); return;}    // simulate a crash
         //if (id==2) delay(4000);              // simulate a delay
-        if (TwoPhaseCommit.predefinedVotes[this.id] == CoordinatorServerMessages.Vote.NO) {
+        if (Main.predefinedVotes[this.id] == CoordinatorServerMessages.Vote.NO) {
             fixDecision(CoordinatorServerMessages.Decision.ABORT);
         }
-        print("sending vote " + TwoPhaseCommit.predefinedVotes[this.id]);
-        this.coordinator.tell(new CoordinatorServerMessages.VoteResponse(TwoPhaseCommit.predefinedVotes[this.id]), getSelf());
-        setTimeout(TwoPhaseCommit.DECISION_TIMEOUT);
+        print("sending vote " + Main.predefinedVotes[this.id]);
+        this.coordinator.tell(new CoordinatorServerMessages.VoteResponse(Main.predefinedVotes[this.id]), getSelf());
+        setTimeout(Main.DECISION_TIMEOUT);
     }
 
     public void onTimeout(CoordinatorServerMessages.Timeout msg) {
@@ -62,7 +63,7 @@ public class Server extends Node {
         if (!hasDecided()) {
             print("Recovery. Asking the coordinator.");
             coordinator.tell(new CoordinatorServerMessages.DecisionRequest(), getSelf());
-            setTimeout(TwoPhaseCommit.DECISION_TIMEOUT);
+            setTimeout(Main.DECISION_TIMEOUT);
         }
     }
 
@@ -70,5 +71,9 @@ public class Server extends Node {
 
         // store the decision
         fixDecision(msg.decision);
+    }
+
+    public void onTransactionRead(CoordinatorServerMessages.TransactionRead msg) {
+        // TODO
     }
 }

@@ -5,24 +5,27 @@ package it.unitn.ds1;
 import akka.actor.ActorRef;
 import akka.actor.Props;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 public class Coordinator extends Node {
 
     // here all the nodes that sent YES are collected
     private final Set<ActorRef> yesVoters = new HashSet<>();
+    private final Map<ActorRef, Transaction> transactionMap = new HashMap<>();
 
     boolean allVotedYes() { // returns true if all voted YES
-        return yesVoters.size() >= TwoPhaseCommit.N_PARTICIPANTS;
+        return yesVoters.size() >= Main.N_SERVER;
     }
 
-    public Coordinator() {
-        super(-1); // the coordinator has the id -1
+    public Coordinator(int id) {
+        super(id);
     }
 
-    static public Props props() {
-        return Props.create(Coordinator.class, Coordinator::new);
+    static public Props props(int id) {
+        return Props.create(Coordinator.class, () -> new Coordinator(id));
     }
 
     @Override
@@ -33,6 +36,8 @@ public class Coordinator extends Node {
                 .match(CoordinatorServerMessages.VoteResponse.class, this::onVoteResponse)
                 .match(CoordinatorServerMessages.Timeout.class, this::onTimeout)
                 .match(CoordinatorServerMessages.DecisionRequest.class, this::onDecisionRequest)
+                .match(ClientCoordinatorMessages.TxnBeginMsg.class, this::onTxnBeginMsg)
+                .match(ClientCoordinatorMessages.ReadMsg.class, this::onReadMsg)
                 .build();
     }
 
@@ -41,7 +46,7 @@ public class Coordinator extends Node {
         print("Sending vote request");
         multicast(new CoordinatorServerMessages.VoteRequest());
         //multicastAndCrash(new VoteRequest(), 3000);
-        setTimeout(TwoPhaseCommit.VOTE_TIMEOUT);
+        setTimeout(Main.VOTE_TIMEOUT);
         //crash(5000);
     }
 
@@ -83,5 +88,19 @@ public class Coordinator extends Node {
         getContext().become(createReceive());
 
         // TODO 2: coordinator recovery action
+    }
+
+    public void onTxnBeginMsg(ClientCoordinatorMessages.TxnBeginMsg msg) {
+        // initialize transaction
+        transactionMap.put(getSender(), new Transaction(msg.clientId, msg.numAttemptedTxn));
+        // send accept
+        getSender().tell(new ClientCoordinatorMessages.TxnAcceptMsg(), getSelf());
+    }
+
+    public void onReadMsg (ClientCoordinatorMessages.ReadMsg msg) {
+        int key = msg.key;
+        int serverId = key % 10;
+        Transaction transaction = transactionMap.get(getSender());
+        servers.get(serverId).tell(new CoordinatorServerMessages.TransactionRead(transaction, key), getSelf());
     }
 }

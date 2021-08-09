@@ -24,8 +24,10 @@ public class ClientCoordinatorMessages {
     // message the client sends to a coordinator to begin the TXN
     public static class TxnBeginMsg implements Serializable {
         public final Integer clientId;
-        public TxnBeginMsg(int clientId) {
+        public final Integer numAttemptedTxn;
+        public TxnBeginMsg(int clientId, int numAttemptedTxn) {
             this.clientId = clientId;
+            this.numAttemptedTxn = numAttemptedTxn;
         }
     }
 

@@ -51,5 +51,25 @@ public class CoordinatorServerMessages {
 
     /*-- Message classes ------------------------------------------------------ */
 
+    public static class TransactionRead implements Serializable {
+        public final Transaction transaction;
+        public final Integer key;
 
+        public TransactionRead(Transaction transaction, Integer key) {
+            this.transaction = transaction;
+            this.key = key;
+        }
+    }
+
+    public static class TransactionWrite implements Serializable {
+        public final Transaction transaction;
+        public final Integer key;
+        public final Integer value;
+
+        public TransactionWrite(Transaction transaction, Integer key, Integer value) {
+            this.transaction = transaction;
+            this.key = key;
+            this.value = value;
+        }
+    }
 }
