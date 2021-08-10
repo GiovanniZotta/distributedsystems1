@@ -50,6 +50,10 @@ public class Main {
             servers.add(system.actorOf(Server.props(i), "server" + i));
         System.out.println("Servers created");
 
+        // Create the checker
+        ActorRef checker = system.actorOf(Checker.props(N_SERVER), "checker");
+
+
         // Send start messages to the clients
         Message.WelcomeMsg startClients = new Message.WelcomeMsg(MAX_KEY, coordinators);
         for (ActorRef peer : clients) {
@@ -66,12 +70,15 @@ public class Main {
         for (ActorRef peer : servers) {
             peer.tell(startOthers, null);
         }
+        checker.tell(startOthers, null);
 
         try {
             System.out.println(">>> Press ENTER to exit <<<");
             System.in.read();
         } catch (IOException ignored) {
         }
+
+        checker.tell(new Message.CheckCorrectness(), null);
         system.terminate();
     }
 }

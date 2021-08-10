@@ -42,6 +42,7 @@ public class Server extends Node {
                 .match(CoordinatorServerMessages.Recovery.class, this::onRecovery)
                 .match(CoordinatorServerMessages.TransactionRead.class, this::onTransactionRead)
                 .match(CoordinatorServerMessages.TransactionWrite.class, this::onTransactionWrite)
+                .match(Message.CheckCorrectness.class, this::onCheckCorrectness)
                 .build();
     }
 
@@ -115,6 +116,14 @@ public class Server extends Node {
         t.getKey().setValue(msg.value);
         t.setValue(true);
 //        getSender().tell(new CoordinatorServerMessages.TransactionReadResponse(valueRead), getSelf());
+    }
+
+    public void onCheckCorrectness(Message.CheckCorrectness msg){
+        Integer result = 0;
+        for (Integer key: database.keySet()) {
+            result += database.get(key).getValue();
+        }
+        getSender().tell(new Message.CheckCorrectnessResponse(result), getSelf());
     }
 
 }

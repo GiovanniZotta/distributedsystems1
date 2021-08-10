@@ -18,4 +18,15 @@ public class Message {
             this.group = Collections.unmodifiableList(new ArrayList<>(group));
         }
     }
+
+    public static class CheckCorrectness implements Serializable {
+    }
+
+    public static class CheckCorrectnessResponse implements Serializable {
+        public final Integer value;
+
+        public CheckCorrectnessResponse(Integer value) {
+            this.value = value;
+        }
+    }
 }

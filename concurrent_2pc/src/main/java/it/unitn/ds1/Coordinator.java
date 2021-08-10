@@ -48,11 +48,6 @@ public class Coordinator extends Node {
 
     public void onWelcomeMsg(Message.WelcomeMsg msg) {                   /* Start */
         setGroup(msg);
-        // print("Sending vote request");
-        // multicast(new CoordinatorServerMessages.VoteRequest());
-        //multicastAndCrash(new VoteRequest(), 3000);
-        // setTimeout(Main.VOTE_TIMEOUT);
-        //crash(5000);
     }
 
     public void onVoteResponse(CoordinatorServerMessages.VoteResponse msg) {                    /* Vote */
