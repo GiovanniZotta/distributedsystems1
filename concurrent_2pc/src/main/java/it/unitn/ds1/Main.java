@@ -15,9 +15,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Main {
-    public final static int N_CLIENTS = 3;
+    public final static int N_CLIENTS = 2;
     public final static int N_COORDINATORS = 3;
-    public final static int N_SERVER = 3;
+    public final static int N_SERVER = 50;
     public final static int MAX_KEY = N_SERVER * Server.DB_SIZE - 1;
 
     public final static int VOTE_TIMEOUT = 1000;      // timeout for the votes, ms

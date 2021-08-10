@@ -2,6 +2,7 @@ package it.unitn.ds1.actors;
 
 import akka.actor.ActorRef;
 import akka.actor.Props;
+import it.unitn.ds1.Transaction;
 import it.unitn.ds1.messages.CoordinatorServerMessages;
 import it.unitn.ds1.messages.Message;
 
@@ -20,6 +21,11 @@ public class Checker extends Node {
 
     @Override
     protected void onRecovery(CoordinatorServerMessages.Recovery msg) {
+
+    }
+
+    @Override
+    void fixDecision(Transaction transaction, CoordinatorServerMessages.Decision d) {
 
     }
 

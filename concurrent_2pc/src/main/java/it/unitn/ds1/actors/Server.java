@@ -1,5 +1,6 @@
 package it.unitn.ds1.actors;
 
+import akka.actor.Actor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
 import it.unitn.ds1.Main;
@@ -8,25 +9,23 @@ import it.unitn.ds1.Transaction;
 import it.unitn.ds1.messages.CoordinatorServerMessages;
 import it.unitn.ds1.messages.Message;
 
-import java.util.AbstractMap;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 
 /*-- Participant -----------------------------------------------------------*/
 public class Server extends Node {
     public static final Integer DEFAULT_VALUE = 100;
     public static final Integer DB_SIZE = 10;
-    private ActorRef coordinator;
     private final Map<Integer, Resource> database;
-    private final Map<Transaction, Map<Integer, Map.Entry<Resource, Boolean>>> workspaces;
+    private final Map<Transaction, Map<Integer, Map.Entry<Resource, Boolean>>> workspaces = new HashMap<>();
+    private final Set<Integer> pendingResource = new HashSet<>();
+    private final Map<Transaction, ActorRef> transaction2coordinator = new HashMap<>();
 
     public Server(int id) {
         super(id);
         database = new HashMap<>();
         for (int i = id * DB_SIZE; i < (id + 1) * DB_SIZE; i++)
             database.put(i, new Resource(DEFAULT_VALUE, 0));
-        workspaces = new HashMap<>();
     }
 
     static public Props props(int id) {
@@ -52,44 +51,116 @@ public class Server extends Node {
         setGroup(msg);
     }
 
+    private Boolean canCommit(Transaction transaction){
+        Map<Integer, Map.Entry<Resource, Boolean>> workspace = workspaces.get(transaction);
+
+        for(Map.Entry<Integer, Map.Entry<Resource, Boolean>> entry : workspace.entrySet()) {
+            Integer version = entry.getValue().getKey().getVersion();
+            Integer key = entry.getKey();
+            if(version != database.get(key).getVersion() || pendingResource.contains(key)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+
+
+    private void freeWorkspace(Transaction transaction){
+        freePendingResources(transaction);
+        workspaces.remove(transaction);
+        transaction2coordinator.remove(transaction);
+    }
+
+    private void lockResources(Transaction transaction){
+        Map<Integer, Map.Entry<Resource, Boolean>> workspace = workspaces.get(transaction);
+        for(Integer key : workspace.keySet()) {
+            pendingResource.add(key);
+        }
+    }
+
+    private void freePendingResources(Transaction transaction){
+        Map<Integer, Map.Entry<Resource, Boolean>> workspace = workspaces.get(transaction);
+        for(Integer key : workspace.keySet()) {
+            pendingResource.remove(key);
+        }
+    }
+
     public void onVoteRequest(CoordinatorServerMessages.VoteRequest msg) {
-        this.coordinator = getSender();
+        Transaction transaction = msg.transaction;
+        CoordinatorServerMessages.Vote vote = null;
         //if (id==2) {crash(5000); return;}    // simulate a crash
         //if (id==2) delay(4000);              // simulate a delay
-        if (Main.predefinedVotes[this.id] == CoordinatorServerMessages.Vote.NO) {
-            fixDecision(CoordinatorServerMessages.Decision.ABORT);
+        if(!canCommit(transaction)){
+            fixDecision(transaction, CoordinatorServerMessages.Decision.ABORT);
+            vote = CoordinatorServerMessages.Vote.NO;
+        } else {
+            transaction2coordinator.put(transaction, getSender());
+            lockResources(transaction);
+            vote = CoordinatorServerMessages.Vote.YES;
         }
-        print("sending vote " + Main.predefinedVotes[this.id]);
-        this.coordinator.tell(new CoordinatorServerMessages.VoteResponse(Main.predefinedVotes[this.id]), getSelf());
-        setTimeout(Main.DECISION_TIMEOUT);
+
+        print("Server " + id + " sending vote " + vote);
+        getSender().tell(new CoordinatorServerMessages.VoteResponse(transaction, vote), getSelf());
+//        setTimeout(Main.DECISION_TIMEOUT);
     }
 
     public void onTimeout(CoordinatorServerMessages.Timeout msg) {
-        if (!hasDecided()) {
-            print("Timeout. Asking around.");
-
-            // TODO 3: participant termination protocol
-            // termination protocol: ask group if anybody knows the decision
-        }
+//        if (!hasDecided()) {
+//            print("Timeout. Asking around.");
+//
+//            // TODO 3: participant termination protocol
+//            // termination protocol: ask group if anybody knows the decision
+//        }
     }
 
     @Override
     public void onRecovery(CoordinatorServerMessages.Recovery msg) {
-        getContext().become(createReceive());
+//        getContext().become(createReceive());
+//
+//        // We don't handle explicitly the "not voted" case here
+//        // (in any case, it does not break the protocol)
+//        if (!hasDecided()) {
+//            print("Recovery. Asking the coordinator.");
+//            coordinator.tell(new CoordinatorServerMessages.DecisionRequest(), getSelf());
+//            setTimeout(Main.DECISION_TIMEOUT);
+//        }
+    }
 
-        // We don't handle explicitly the "not voted" case here
-        // (in any case, it does not break the protocol)
-        if (!hasDecided()) {
-            print("Recovery. Asking the coordinator.");
-            coordinator.tell(new CoordinatorServerMessages.DecisionRequest(), getSelf());
-            setTimeout(Main.DECISION_TIMEOUT);
+    private void commitWorkspace(Transaction transaction){
+        Map<Integer, Map.Entry<Resource, Boolean>> workspace = workspaces.get(transaction);
+
+        for(Map.Entry<Integer, Map.Entry<Resource, Boolean>> entry : workspace.entrySet()) {
+            Integer key = entry.getKey();
+            Integer value = entry.getValue().getKey().getValue();
+            Integer version = entry.getValue().getKey().getVersion();
+            Boolean changed = entry.getValue().getValue();
+
+            assert(version == database.get(key).getVersion());
+            if(changed) {
+                database.get(key).setValue(value);
+                database.get(key).setVersion(version + 1);
+            }
         }
     }
 
-    public void onDecisionResponse(CoordinatorServerMessages.DecisionResponse msg) { /* Decision Response */
+    @Override
+    void fixDecision(Transaction transaction, CoordinatorServerMessages.Decision d) {
+        if (!hasDecided(transaction)) {
+            transaction2decision.put(transaction, d);
+            print("decided " + d);
+            if(d == CoordinatorServerMessages.Decision.COMMIT){
+                commitWorkspace(transaction);
+            }
+            freeWorkspace(transaction);
+        }
 
+    }
+
+    public void onDecisionResponse(CoordinatorServerMessages.DecisionResponse msg) { /* Decision Response */
+        Transaction transaction = msg.transaction;
         // store the decision
-        fixDecision(msg.decision);
+        fixDecision(transaction, msg.decision);
     }
 
     private Map.Entry<Resource, Boolean> processWorkspace(CoordinatorServerMessages.TransactionAction msg) {
@@ -108,15 +179,16 @@ public class Server extends Node {
 
     public void onTransactionRead(CoordinatorServerMessages.TransactionRead msg) {
         int valueRead = processWorkspace(msg).getKey().getValue();
-        getSender().tell(new CoordinatorServerMessages.TransactionReadResponse(msg.transaction, msg.key, valueRead),
+        getSender().tell(new CoordinatorServerMessages.TxnReadResponseMsg(msg.transaction, msg.key, valueRead),
                 getSelf());
     }
 
 
     public void onTransactionWrite(CoordinatorServerMessages.TransactionWrite msg) {
-        Map.Entry<Resource, Boolean> t = processWorkspace(msg);
-        t.getKey().setValue(msg.value);
-        t.setValue(true);
+        Map.Entry<Resource, Boolean> resource = processWorkspace(msg);
+        resource.getKey().setValue(msg.value);
+        // changed
+        resource.setValue(true);
 //        getSender().tell(new CoordinatorServerMessages.TransactionReadResponse(valueRead), getSelf());
     }
 

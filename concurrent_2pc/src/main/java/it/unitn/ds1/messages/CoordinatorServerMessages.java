@@ -16,25 +16,40 @@ public class CoordinatorServerMessages extends Message {
     public enum Decision {ABORT, COMMIT}
 
     public static class VoteRequest implements Serializable {
+        public final Transaction transaction;
+
+        public VoteRequest(Transaction transaction) {
+            this.transaction = transaction;
+        }
     }
 
     public static class VoteResponse implements Serializable {
+        public final Transaction transaction;
         public final Vote vote;
 
-        public VoteResponse(Vote v) {
-            vote = v;
+        public VoteResponse(Transaction transaction, Vote vote) {
+            this.transaction = transaction;
+            this.vote = vote;
         }
     }
 
     public static class DecisionRequest implements Serializable {
+        public DecisionRequest(Transaction transaction) {
+            this.transaction = transaction;
+        }
+
+        public final Transaction transaction;
     }
 
     public static class DecisionResponse implements Serializable {
+        public final Transaction transaction;
         public final Decision decision;
 
-        public DecisionResponse(Decision d) {
-            decision = d;
+        public DecisionResponse(Transaction transaction, Decision decision) {
+            this.transaction = transaction;
+            this.decision = decision;
         }
+
     }
 
     public static class Timeout implements Serializable {
@@ -69,10 +84,10 @@ public class CoordinatorServerMessages extends Message {
         }
     }
 
-    public static class TransactionReadResponse extends TransactionAction implements Serializable {
+    public static class TxnReadResponseMsg extends TransactionAction implements Serializable {
         public final Integer valueRead;
 
-        public TransactionReadResponse(Transaction transaction, Integer key, Integer valueRead) {
+        public TxnReadResponseMsg(Transaction transaction, Integer key, Integer valueRead) {
             super(transaction, key);
             this.valueRead = valueRead;
         }

@@ -4,24 +4,25 @@ package it.unitn.ds1.actors;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
+import it.unitn.ds1.Transaction;
 import it.unitn.ds1.messages.ClientCoordinatorMessages;
 import it.unitn.ds1.messages.CoordinatorServerMessages;
 import it.unitn.ds1.messages.Message;
 import scala.concurrent.duration.Duration;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public abstract class Node extends AbstractActor {
     protected int id;                           // node ID
     protected List<ActorRef> servers;      // list of participant nodes
-    protected CoordinatorServerMessages.Decision decision = null;         // decision taken by this node
+    protected final Map<Transaction, CoordinatorServerMessages.Decision> transaction2decision;
 
     public Node(int id) {
         super();
         this.id = id;
+        transaction2decision = new HashMap<>();
     }
 
     // abstract method to be implemented in extending classes
@@ -61,8 +62,8 @@ public abstract class Node extends AbstractActor {
         }
     }
 
-    void multicast(Serializable m) {
-        for (ActorRef p : servers)
+    void multicast(Serializable m, Collection<ActorRef> group) {
+        for (ActorRef p : group)
             p.tell(m, getSelf());
     }
 
@@ -85,16 +86,10 @@ public abstract class Node extends AbstractActor {
         );
     }
 
-    // fix the final decision of the current node
-    void fixDecision(CoordinatorServerMessages.Decision d) {
-        if (!hasDecided()) {
-            this.decision = d;
-            print("decided " + d);
-        }
-    }
+    abstract void fixDecision(Transaction transaction, CoordinatorServerMessages.Decision d);
 
-    boolean hasDecided() {
-        return decision != null;
+    boolean hasDecided(Transaction transaction) {
+        return transaction2decision.get(transaction) != null;
     } // has the node decided?
 
     // a simple logging function
@@ -118,8 +113,9 @@ public abstract class Node extends AbstractActor {
     }
 
     public void onDecisionRequest(CoordinatorServerMessages.DecisionRequest msg) {  /* Decision Request */
-        if (hasDecided())
-            getSender().tell(new CoordinatorServerMessages.DecisionResponse(decision), getSelf());
+        Transaction transaction = msg.transaction;
+        if (hasDecided(transaction))
+            getSender().tell(new CoordinatorServerMessages.DecisionResponse(transaction, transaction2decision.get(transaction)), getSelf());
 
         // just ignoring if we don't know the decision
     }

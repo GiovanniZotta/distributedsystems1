@@ -17,6 +17,7 @@ public class ClientCoordinatorMessages extends Message {
     public static class TxnBeginMsg implements Serializable {
         public final Integer clientId;
         public final Integer numAttemptedTxn;
+
         public TxnBeginMsg(int clientId, int numAttemptedTxn) {
             this.clientId = clientId;
             this.numAttemptedTxn = numAttemptedTxn;
