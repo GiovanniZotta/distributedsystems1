@@ -1,21 +1,15 @@
-package it.unitn.ds1;
+package it.unitn.ds1.messages;
 
 import akka.actor.ActorRef;
+import it.unitn.ds1.Transaction;
+import it.unitn.ds1.messages.Message;
 
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public class CoordinatorServerMessages {
-    // Start message that sends the list of participants to everyone
-    public static class StartMessage implements Serializable {
-        public final List<ActorRef> group;
-
-        public StartMessage(List<ActorRef> group) {
-            this.group = Collections.unmodifiableList(new ArrayList<>(group));
-        }
-    }
+public class CoordinatorServerMessages extends Message {
 
     public enum Vote {NO, YES}
 

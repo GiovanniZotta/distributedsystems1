@@ -4,6 +4,9 @@ package it.unitn.ds1;
 
 import akka.actor.ActorRef;
 import akka.actor.Props;
+import it.unitn.ds1.messages.ClientCoordinatorMessages;
+import it.unitn.ds1.messages.CoordinatorServerMessages;
+import it.unitn.ds1.messages.Message;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -32,7 +35,7 @@ public class Coordinator extends Node {
     public Receive createReceive() {
         return receiveBuilder()
                 .match(CoordinatorServerMessages.Recovery.class, this::onRecovery)
-                .match(ClientCoordinatorMessages.WelcomeMsg.class, this::onWelcomeMsg)
+                .match(Message.WelcomeMsg.class, this::onWelcomeMsg)
                 .match(CoordinatorServerMessages.VoteResponse.class, this::onVoteResponse)
                 .match(CoordinatorServerMessages.Timeout.class, this::onTimeout)
                 .match(CoordinatorServerMessages.DecisionRequest.class, this::onDecisionRequest)
@@ -43,7 +46,7 @@ public class Coordinator extends Node {
                 .build();
     }
 
-    public void onWelcomeMsg(ClientCoordinatorMessages.WelcomeMsg msg) {                   /* Start */
+    public void onWelcomeMsg(Message.WelcomeMsg msg) {                   /* Start */
         setGroup(msg);
         // print("Sending vote request");
         // multicast(new CoordinatorServerMessages.VoteRequest());

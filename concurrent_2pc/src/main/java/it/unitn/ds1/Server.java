@@ -2,6 +2,9 @@ package it.unitn.ds1;
 
 import akka.actor.ActorRef;
 import akka.actor.Props;
+import it.unitn.ds1.messages.ClientCoordinatorMessages;
+import it.unitn.ds1.messages.CoordinatorServerMessages;
+import it.unitn.ds1.messages.Message;
 
 import java.util.AbstractMap;
 import java.util.HashMap;
@@ -31,7 +34,7 @@ public class Server extends Node {
     @Override
     public Receive createReceive() {
         return receiveBuilder()
-                .match(ClientCoordinatorMessages.WelcomeMsg.class, this::onWelcomeMsg)
+                .match(Message.WelcomeMsg.class, this::onWelcomeMsg)
                 .match(CoordinatorServerMessages.VoteRequest.class, this::onVoteRequest)
                 .match(CoordinatorServerMessages.DecisionRequest.class, this::onDecisionRequest)
                 .match(CoordinatorServerMessages.DecisionResponse.class, this::onDecisionResponse)
@@ -42,7 +45,7 @@ public class Server extends Node {
                 .build();
     }
 
-    public void onWelcomeMsg(ClientCoordinatorMessages.WelcomeMsg msg) {
+    public void onWelcomeMsg(Message.WelcomeMsg msg) {
         setGroup(msg);
     }
 

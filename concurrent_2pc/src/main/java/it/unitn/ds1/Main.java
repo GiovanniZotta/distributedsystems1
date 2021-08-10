@@ -3,7 +3,9 @@ package it.unitn.ds1;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 
-import it.unitn.ds1.CoordinatorServerMessages.Vote;
+import it.unitn.ds1.messages.CoordinatorServerMessages.Vote;
+import it.unitn.ds1.messages.ClientCoordinatorMessages;
+import it.unitn.ds1.messages.Message;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -30,32 +32,36 @@ public class Main {
         // Create the actor system
         final ActorSystem system = ActorSystem.create("concurrent2pc");
 
-        // Create the group
+        // Create the clients
         List<ActorRef> clients = new ArrayList<>();
         for (int i = 0; i < N_CLIENTS; i++)
             clients.add(system.actorOf(Client.props(i), "client" + i));
         System.out.println("Clients created");
-        // Create the group
+
+        // Create the coordinators
         List<ActorRef> coordinators = new ArrayList<>();
         for (int i = 0; i < N_COORDINATORS; i++)
             coordinators.add(system.actorOf(Coordinator.props(i), "coordinator" + i));
         System.out.println("Coordinators created");
-        // Create the group
+
+        // Create the servers
         List<ActorRef> servers = new ArrayList<>();
         for (int i = 0; i < N_SERVER; i++)
             servers.add(system.actorOf(Server.props(i), "server" + i));
         System.out.println("Servers created");
+
         // Send start messages to the clients
-        ClientCoordinatorMessages.WelcomeMsg startClients = new ClientCoordinatorMessages.WelcomeMsg(MAX_KEY, coordinators);
+        Message.WelcomeMsg startClients = new Message.WelcomeMsg(MAX_KEY, coordinators);
         for (ActorRef peer : clients) {
             peer.tell(startClients, null);
         }
 
         // Send start messages to the group
-        ClientCoordinatorMessages.WelcomeMsg startOthers = new ClientCoordinatorMessages.WelcomeMsg(MAX_KEY, servers);
+        Message.WelcomeMsg startOthers = new Message.WelcomeMsg(MAX_KEY, servers);
         for (ActorRef peer : coordinators) {
             peer.tell(startOthers, null);
         }
+
         // Send start messages to the servers
         for (ActorRef peer : servers) {
             peer.tell(startOthers, null);

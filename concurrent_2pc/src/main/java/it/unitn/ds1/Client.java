@@ -4,6 +4,8 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import akka.actor.*;
+import it.unitn.ds1.messages.ClientCoordinatorMessages;
+import it.unitn.ds1.messages.Message;
 import scala.concurrent.duration.Duration;
 
 public class Client extends AbstractActor {
@@ -120,7 +122,7 @@ public class Client extends AbstractActor {
 
     /*-- Message handlers ----------------------------------------------------- */
 
-    private void onWelcomeMsg(ClientCoordinatorMessages.WelcomeMsg msg) {
+    private void onWelcomeMsg(Message.WelcomeMsg msg) {
         this.coordinators = msg.group;
         System.out.println(coordinators);
         this.maxKey = msg.maxKey;
@@ -179,7 +181,7 @@ public class Client extends AbstractActor {
     @Override
     public Receive createReceive() {
         return receiveBuilder()
-                .match(ClientCoordinatorMessages.WelcomeMsg.class,  this::onWelcomeMsg)
+                .match(Message.WelcomeMsg.class,  this::onWelcomeMsg)
                 .match(ClientCoordinatorMessages.TxnAcceptMsg.class,  this::onTxnAcceptMsg)
                 .match(ClientCoordinatorMessages.TxnAcceptTimeoutMsg.class,  this::onTxnAcceptTimeoutMsg)
                 .match(ClientCoordinatorMessages.ReadResultMsg.class,  this::onReadResultMsg)

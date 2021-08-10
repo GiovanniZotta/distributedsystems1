@@ -26,7 +26,7 @@ public class Transaction implements Cloneable {
     }
 
     @Override
-    protected Object clone() {
+    public Object clone() {
         return new Transaction(txnId.getKey(), txnId.getValue());
     }
 }
