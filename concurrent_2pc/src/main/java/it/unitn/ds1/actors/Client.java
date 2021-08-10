@@ -1,4 +1,4 @@
-package it.unitn.ds1;
+package it.unitn.ds1.actors;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;

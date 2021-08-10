@@ -1,4 +1,4 @@
-package it.unitn.ds1;
+package it.unitn.ds1.actors;
 
 /*-- Common functionality for both Coordinator and Participants ------------*/
 

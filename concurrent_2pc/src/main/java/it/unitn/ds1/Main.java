@@ -3,8 +3,11 @@ package it.unitn.ds1;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 
+import it.unitn.ds1.actors.Checker;
+import it.unitn.ds1.actors.Client;
+import it.unitn.ds1.actors.Coordinator;
+import it.unitn.ds1.actors.Server;
 import it.unitn.ds1.messages.CoordinatorServerMessages.Vote;
-import it.unitn.ds1.messages.ClientCoordinatorMessages;
 import it.unitn.ds1.messages.Message;
 
 import java.io.IOException;
@@ -12,16 +15,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Main {
-    final static int N_CLIENTS = 3;
-    final static int N_COORDINATORS = 3;
-    final static int N_SERVER = 3;
-    final static int MAX_KEY = N_SERVER * Server.DB_SIZE - 1;
+    public final static int N_CLIENTS = 3;
+    public final static int N_COORDINATORS = 3;
+    public final static int N_SERVER = 3;
+    public final static int MAX_KEY = N_SERVER * Server.DB_SIZE - 1;
 
-    final static int VOTE_TIMEOUT = 1000;      // timeout for the votes, ms
-    final static int DECISION_TIMEOUT = 2000;  // timeout for the decision, ms
+    public final static int VOTE_TIMEOUT = 1000;      // timeout for the votes, ms
+    public final static int DECISION_TIMEOUT = 2000;  // timeout for the decision, ms
 
     // the votes that the participants will send (for testing)
-    final static Vote[] predefinedVotes =
+    public final static Vote[] predefinedVotes =
             new Vote[]{Vote.YES, Vote.YES, Vote.YES}; // as many as N_PARTICIPANTS
 
 

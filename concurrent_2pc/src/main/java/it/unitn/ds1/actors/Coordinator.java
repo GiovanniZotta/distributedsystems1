@@ -1,9 +1,11 @@
-package it.unitn.ds1;
+package it.unitn.ds1.actors;
 
 /*-- Coordinator -----------------------------------------------------------*/
 
 import akka.actor.ActorRef;
 import akka.actor.Props;
+import it.unitn.ds1.Main;
+import it.unitn.ds1.Transaction;
 import it.unitn.ds1.messages.ClientCoordinatorMessages;
 import it.unitn.ds1.messages.CoordinatorServerMessages;
 import it.unitn.ds1.messages.Message;

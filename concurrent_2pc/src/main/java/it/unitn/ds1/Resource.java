@@ -26,7 +26,7 @@ public class Resource implements Cloneable {
     }
 
     @Override
-    protected Object clone() {
+    public Object clone() {
         return new Resource(value, version);
     }
 }

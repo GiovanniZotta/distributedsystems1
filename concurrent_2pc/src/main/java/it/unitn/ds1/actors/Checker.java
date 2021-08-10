@@ -1,15 +1,9 @@
-package it.unitn.ds1;
+package it.unitn.ds1.actors;
 
-import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
-import it.unitn.ds1.messages.ClientCoordinatorMessages;
 import it.unitn.ds1.messages.CoordinatorServerMessages;
 import it.unitn.ds1.messages.Message;
-
-import java.util.AbstractMap;
-import java.util.HashMap;
-import java.util.Map;
 
 
 /*-- Participant -----------------------------------------------------------*/
