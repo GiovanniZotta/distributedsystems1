@@ -2,7 +2,7 @@ package it.unitn.ds1;
 
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
-import it.unitn.ds1.CoordinatorServerMessages.StartMessage;
+
 import it.unitn.ds1.CoordinatorServerMessages.Vote;
 
 import java.io.IOException;
@@ -13,6 +13,8 @@ public class Main {
     final static int N_CLIENTS = 3;
     final static int N_COORDINATORS = 3;
     final static int N_SERVER = 3;
+    final static int MAX_KEY = N_SERVER * Server.DB_SIZE - 1;
+
     final static int VOTE_TIMEOUT = 1000;      // timeout for the votes, ms
     final static int DECISION_TIMEOUT = 2000;  // timeout for the decision, ms
 
@@ -28,29 +30,29 @@ public class Main {
         // Create the actor system
         final ActorSystem system = ActorSystem.create("concurrent2pc");
 
-        // Create the coordinators
+        // Create the group
         List<ActorRef> clients = new ArrayList<>();
         for (int i = 0; i < N_CLIENTS; i++)
             clients.add(system.actorOf(Client.props(i), "client" + i));
-
-        // Create the coordinators
+        System.out.println("Clients created");
+        // Create the group
         List<ActorRef> coordinators = new ArrayList<>();
         for (int i = 0; i < N_COORDINATORS; i++)
             coordinators.add(system.actorOf(Coordinator.props(i), "coordinator" + i));
-
-        // Create the coordinators
+        System.out.println("Coordinators created");
+        // Create the group
         List<ActorRef> servers = new ArrayList<>();
         for (int i = 0; i < N_SERVER; i++)
             servers.add(system.actorOf(Server.props(i), "server" + i));
-
+        System.out.println("Servers created");
         // Send start messages to the clients
-        StartMessage startClients = new StartMessage(coordinators);
+        ClientCoordinatorMessages.WelcomeMsg startClients = new ClientCoordinatorMessages.WelcomeMsg(MAX_KEY, coordinators);
         for (ActorRef peer : clients) {
             peer.tell(startClients, null);
         }
 
-        // Send start messages to the coordinators
-        StartMessage startOthers = new StartMessage(servers);
+        // Send start messages to the group
+        ClientCoordinatorMessages.WelcomeMsg startOthers = new ClientCoordinatorMessages.WelcomeMsg(MAX_KEY, servers);
         for (ActorRef peer : coordinators) {
             peer.tell(startOthers, null);
         }

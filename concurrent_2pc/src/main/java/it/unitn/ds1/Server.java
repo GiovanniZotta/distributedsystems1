@@ -2,6 +2,7 @@ package it.unitn.ds1;
 
 import akka.actor.ActorRef;
 import akka.actor.Props;
+
 import java.util.AbstractMap;
 import java.util.HashMap;
 import java.util.Map;
@@ -14,6 +15,7 @@ public class Server extends Node {
     private ActorRef coordinator;
     private final Map<Integer, Resource> database;
     private final Map<Transaction, Map<Integer, Map.Entry<Resource, Boolean>>> workspaces;
+
     public Server(int id) {
         super(id);
         database = new HashMap<>();
@@ -29,7 +31,7 @@ public class Server extends Node {
     @Override
     public Receive createReceive() {
         return receiveBuilder()
-                .match(CoordinatorServerMessages.StartMessage.class, this::onStartMessage)
+                .match(ClientCoordinatorMessages.WelcomeMsg.class, this::onWelcomeMsg)
                 .match(CoordinatorServerMessages.VoteRequest.class, this::onVoteRequest)
                 .match(CoordinatorServerMessages.DecisionRequest.class, this::onDecisionRequest)
                 .match(CoordinatorServerMessages.DecisionResponse.class, this::onDecisionResponse)
@@ -40,7 +42,7 @@ public class Server extends Node {
                 .build();
     }
 
-    public void onStartMessage(CoordinatorServerMessages.StartMessage msg) {
+    public void onWelcomeMsg(ClientCoordinatorMessages.WelcomeMsg msg) {
         setGroup(msg);
     }
 
@@ -84,9 +86,9 @@ public class Server extends Node {
         fixDecision(msg.decision);
     }
 
-    private Map.Entry<Resource, Boolean> processWorkspace (CoordinatorServerMessages.TransactionAction msg) {
+    private Map.Entry<Resource, Boolean> processWorkspace(CoordinatorServerMessages.TransactionAction msg) {
         // create workspace if the transaction is new
-        if (! workspaces.containsKey(msg.transaction)) {
+        if (!workspaces.containsKey(msg.transaction)) {
             workspaces.put(msg.transaction, new HashMap<>());
         }
 
@@ -100,7 +102,8 @@ public class Server extends Node {
 
     public void onTransactionRead(CoordinatorServerMessages.TransactionRead msg) {
         int valueRead = processWorkspace(msg).getKey().getValue();
-        getSender().tell(new CoordinatorServerMessages.TransactionReadResponse(valueRead), getSelf());
+        getSender().tell(new CoordinatorServerMessages.TransactionReadResponse(msg.transaction, msg.key, valueRead),
+                getSelf());
     }
 
 

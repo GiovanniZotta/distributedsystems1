@@ -121,7 +121,7 @@ public class Client extends AbstractActor {
     /*-- Message handlers ----------------------------------------------------- */
 
     private void onWelcomeMsg(ClientCoordinatorMessages.WelcomeMsg msg) {
-        this.coordinators = msg.coordinators;
+        this.coordinators = msg.group;
         System.out.println(coordinators);
         this.maxKey = msg.maxKey;
         beginTxn();

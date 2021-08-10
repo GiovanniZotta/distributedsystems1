@@ -14,8 +14,8 @@ public class Coordinator extends Node {
 
     // here all the nodes that sent YES are collected
     private final Set<ActorRef> yesVoters = new HashSet<>();
-    private final Map<ActorRef, Transaction> transactionMap = new HashMap<>();
-
+    private final Map<ActorRef, Transaction> client2transaction = new HashMap<>();
+    private final Map<Transaction, ActorRef> transaction2client = new HashMap<>();
     boolean allVotedYes() { // returns true if all voted YES
         return yesVoters.size() >= Main.N_SERVER;
     }
@@ -32,21 +32,23 @@ public class Coordinator extends Node {
     public Receive createReceive() {
         return receiveBuilder()
                 .match(CoordinatorServerMessages.Recovery.class, this::onRecovery)
-                .match(CoordinatorServerMessages.StartMessage.class, this::onStartMessage)
+                .match(ClientCoordinatorMessages.WelcomeMsg.class, this::onWelcomeMsg)
                 .match(CoordinatorServerMessages.VoteResponse.class, this::onVoteResponse)
                 .match(CoordinatorServerMessages.Timeout.class, this::onTimeout)
                 .match(CoordinatorServerMessages.DecisionRequest.class, this::onDecisionRequest)
                 .match(ClientCoordinatorMessages.TxnBeginMsg.class, this::onTxnBeginMsg)
                 .match(ClientCoordinatorMessages.ReadMsg.class, this::onReadMsg)
+                .match(CoordinatorServerMessages.TransactionReadResponse.class, this::onTransactionReadResponseMsg)
+                .match(ClientCoordinatorMessages.WriteMsg.class, this::onWriteMsg)
                 .build();
     }
 
-    public void onStartMessage(CoordinatorServerMessages.StartMessage msg) {                   /* Start */
+    public void onWelcomeMsg(ClientCoordinatorMessages.WelcomeMsg msg) {                   /* Start */
         setGroup(msg);
-        print("Sending vote request");
-        multicast(new CoordinatorServerMessages.VoteRequest());
+        // print("Sending vote request");
+        // multicast(new CoordinatorServerMessages.VoteRequest());
         //multicastAndCrash(new VoteRequest(), 3000);
-        setTimeout(Main.VOTE_TIMEOUT);
+        // setTimeout(Main.VOTE_TIMEOUT);
         //crash(5000);
     }
 
@@ -92,15 +94,30 @@ public class Coordinator extends Node {
 
     public void onTxnBeginMsg(ClientCoordinatorMessages.TxnBeginMsg msg) {
         // initialize transaction
-        transactionMap.put(getSender(), new Transaction(msg.clientId, msg.numAttemptedTxn));
+        Transaction t = new Transaction(msg.clientId, msg.numAttemptedTxn);
+        client2transaction.put(getSender(), t);
+        transaction2client.put(t, getSender());
         // send accept
         getSender().tell(new ClientCoordinatorMessages.TxnAcceptMsg(), getSelf());
     }
 
     public void onReadMsg (ClientCoordinatorMessages.ReadMsg msg) {
         int key = msg.key;
-        int serverId = key % Server.DB_SIZE;
-        Transaction transaction = transactionMap.get(getSender());
+        int serverId = key / Server.DB_SIZE;
+        Transaction transaction = client2transaction.get(getSender());
         servers.get(serverId).tell(new CoordinatorServerMessages.TransactionRead(transaction, key), getSelf());
+    }
+
+    public void onTransactionReadResponseMsg(CoordinatorServerMessages.TransactionReadResponse msg) {
+        ActorRef c = transaction2client.get(msg.transaction);
+        c.tell(new ClientCoordinatorMessages.ReadResultMsg(msg.key, msg.valueRead), getSelf());
+    }
+
+    public void onWriteMsg (ClientCoordinatorMessages.WriteMsg msg) {
+        int key = msg.key;
+        int value = msg.value;
+        int serverId = key / Server.DB_SIZE;
+        Transaction transaction = client2transaction.get(getSender());
+        servers.get(serverId).tell(new CoordinatorServerMessages.TransactionWrite(transaction, key, value), getSelf());
     }
 }

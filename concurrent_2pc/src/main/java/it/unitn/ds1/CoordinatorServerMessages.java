@@ -75,10 +75,11 @@ public class CoordinatorServerMessages {
         }
     }
 
-    public static class TransactionReadResponse implements Serializable {
+    public static class TransactionReadResponse extends TransactionAction implements Serializable {
         public final Integer valueRead;
 
-        public TransactionReadResponse(Integer valueRead) {
+        public TransactionReadResponse(Transaction transaction, Integer key, Integer valueRead) {
+            super(transaction, key);
             this.valueRead = valueRead;
         }
     }

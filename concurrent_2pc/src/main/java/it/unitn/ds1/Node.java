@@ -24,7 +24,7 @@ public abstract class Node extends AbstractActor {
     // abstract method to be implemented in extending classes
     protected abstract void onRecovery(CoordinatorServerMessages.Recovery msg);
 
-    void setGroup(CoordinatorServerMessages.StartMessage sm) {
+    void setGroup(ClientCoordinatorMessages.WelcomeMsg sm) {
         servers = new ArrayList<>();
         for (ActorRef b : sm.group) {
             if (!b.equals(getSelf())) {

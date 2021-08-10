@@ -8,13 +8,13 @@ import java.util.Collections;
 import java.util.List;
 
 public class ClientCoordinatorMessages {
-    // send this message to the client at startup to inform it about the coordinators and the keys
+    // send this message to the client at startup to inform it about the group and the keys
     public static class WelcomeMsg implements Serializable {
         public final Integer maxKey;
-        public final List<ActorRef> coordinators;
-        public WelcomeMsg(int maxKey, List<ActorRef> coordinators) {
+        public final List<ActorRef> group;
+        public WelcomeMsg(int maxKey, List<ActorRef> group) {
             this.maxKey = maxKey;
-            this.coordinators = Collections.unmodifiableList(new ArrayList<>(coordinators));
+            this.group = Collections.unmodifiableList(new ArrayList<>(group));
         }
     }
 
@@ -87,4 +87,5 @@ public class ClientCoordinatorMessages {
             this.commit = commit;
         }
     }
+
 }
