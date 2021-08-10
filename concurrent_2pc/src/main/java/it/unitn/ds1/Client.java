@@ -6,7 +6,7 @@ import java.util.concurrent.TimeUnit;
 import akka.actor.*;
 import scala.concurrent.duration.Duration;
 
-public class TxnClient extends AbstractActor {
+public class Client extends AbstractActor {
     private static final double COMMIT_PROBABILITY = 0.8;
     private static final double WRITE_PROBABILITY = 0.5;
     private static final int MIN_TXN_LENGTH = 20;
@@ -35,7 +35,7 @@ public class TxnClient extends AbstractActor {
 
     /*-- Actor constructor ---------------------------------------------------- */
 
-    public TxnClient(int clientId) {
+    public Client(int clientId) {
         this.clientId = clientId;
         this.numAttemptedTxn = 0;
         this.numCommittedTxn = 0;
@@ -43,7 +43,7 @@ public class TxnClient extends AbstractActor {
     }
 
     static public Props props(int clientId) {
-        return Props.create(TxnClient.class, () -> new TxnClient(clientId));
+        return Props.create(Client.class, () -> new Client(clientId));
     }
 
     /*-- Actor methods -------------------------------------------------------- */

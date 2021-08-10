@@ -50,26 +50,36 @@ public class CoordinatorServerMessages {
     }
 
     /*-- Message classes ------------------------------------------------------ */
-
-    public static class TransactionRead implements Serializable {
+    public static abstract class TransactionAction implements Serializable {
         public final Transaction transaction;
         public final Integer key;
 
-        public TransactionRead(Transaction transaction, Integer key) {
-            this.transaction = transaction;
+        public TransactionAction(Transaction transaction, Integer key) {
+            this.transaction = (Transaction) transaction.clone();
             this.key = key;
         }
     }
+    public static class TransactionRead extends TransactionAction implements Serializable {
+        public TransactionRead(Transaction transaction, Integer key) {
+            super(transaction, key);
+        }
+    }
 
-    public static class TransactionWrite implements Serializable {
-        public final Transaction transaction;
-        public final Integer key;
+
+    public static class TransactionWrite extends TransactionAction implements Serializable {
         public final Integer value;
 
         public TransactionWrite(Transaction transaction, Integer key, Integer value) {
-            this.transaction = transaction;
-            this.key = key;
+            super(transaction, key);
             this.value = value;
+        }
+    }
+
+    public static class TransactionReadResponse implements Serializable {
+        public final Integer valueRead;
+
+        public TransactionReadResponse(Integer valueRead) {
+            this.valueRead = valueRead;
         }
     }
 }

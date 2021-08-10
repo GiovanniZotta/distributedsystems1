@@ -99,7 +99,7 @@ public class Coordinator extends Node {
 
     public void onReadMsg (ClientCoordinatorMessages.ReadMsg msg) {
         int key = msg.key;
-        int serverId = key % 10;
+        int serverId = key % Server.DB_SIZE;
         Transaction transaction = transactionMap.get(getSender());
         servers.get(serverId).tell(new CoordinatorServerMessages.TransactionRead(transaction, key), getSelf());
     }

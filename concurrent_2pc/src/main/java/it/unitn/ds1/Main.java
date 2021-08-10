@@ -31,7 +31,7 @@ public class Main {
         // Create the coordinators
         List<ActorRef> clients = new ArrayList<>();
         for (int i = 0; i < N_CLIENTS; i++)
-            clients.add(system.actorOf(TxnClient.props(i), "client" + i));
+            clients.add(system.actorOf(Client.props(i), "client" + i));
 
         // Create the coordinators
         List<ActorRef> coordinators = new ArrayList<>();

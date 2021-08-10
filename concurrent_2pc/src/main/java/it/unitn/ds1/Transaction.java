@@ -1,14 +1,16 @@
 package it.unitn.ds1;
 
-import scala.Tuple2;
 
-public class Transaction {
-    private Tuple2<Integer, Integer> txnId;
+import java.io.Serializable;
+import java.util.AbstractMap;
+import java.util.Map;
+
+public class Transaction implements Cloneable {
+    private Map.Entry<Integer, Integer> txnId;
 
     public Transaction(Integer clientId, Integer numAttemptedTxn) {
-        this.txnId = new Tuple2<>(clientId, numAttemptedTxn);
+        this.txnId = new AbstractMap.SimpleEntry<>(clientId, numAttemptedTxn);
     }
-
 
     @Override
     public boolean equals(Object o) {
@@ -21,5 +23,10 @@ public class Transaction {
     @Override
     public int hashCode() {
         return txnId.hashCode();
+    }
+
+    @Override
+    protected Object clone() {
+        return new Transaction(txnId.getKey(), txnId.getValue());
     }
 }

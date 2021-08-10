@@ -2,14 +2,24 @@ package it.unitn.ds1;
 
 import akka.actor.ActorRef;
 import akka.actor.Props;
+import java.util.AbstractMap;
+import java.util.HashMap;
+import java.util.Map;
 
 
 /*-- Participant -----------------------------------------------------------*/
 public class Server extends Node {
-    ActorRef coordinator;
-
+    public static final Integer DEFAULT_VALUE = 100;
+    public static final Integer DB_SIZE = 10;
+    private ActorRef coordinator;
+    private final Map<Integer, Resource> database;
+    private final Map<Transaction, Map<Integer, Map.Entry<Resource, Boolean>>> workspaces;
     public Server(int id) {
         super(id);
+        database = new HashMap<>();
+        for (int i = id * DB_SIZE; i < (id + 1) * DB_SIZE; i++)
+            database.put(i, new Resource(DEFAULT_VALUE, 0));
+        workspaces = new HashMap<>();
     }
 
     static public Props props(int id) {
@@ -26,6 +36,7 @@ public class Server extends Node {
                 .match(CoordinatorServerMessages.Timeout.class, this::onTimeout)
                 .match(CoordinatorServerMessages.Recovery.class, this::onRecovery)
                 .match(CoordinatorServerMessages.TransactionRead.class, this::onTransactionRead)
+                .match(CoordinatorServerMessages.TransactionWrite.class, this::onTransactionWrite)
                 .build();
     }
 
@@ -73,7 +84,31 @@ public class Server extends Node {
         fixDecision(msg.decision);
     }
 
-    public void onTransactionRead(CoordinatorServerMessages.TransactionRead msg) {
-        // TODO
+    private Map.Entry<Resource, Boolean> processWorkspace (CoordinatorServerMessages.TransactionAction msg) {
+        // create workspace if the transaction is new
+        if (! workspaces.containsKey(msg.transaction)) {
+            workspaces.put(msg.transaction, new HashMap<>());
+        }
+
+        Map<Integer, Map.Entry<Resource, Boolean>> ws = workspaces.get(msg.transaction);
+        if (!ws.containsKey(msg.key)) {
+            Resource r = (Resource) database.get(msg.key).clone();
+            ws.put(msg.key, new AbstractMap.SimpleEntry<>(r, false));
+        }
+        return ws.get(msg.key);
     }
+
+    public void onTransactionRead(CoordinatorServerMessages.TransactionRead msg) {
+        int valueRead = processWorkspace(msg).getKey().getValue();
+        getSender().tell(new CoordinatorServerMessages.TransactionReadResponse(valueRead), getSelf());
+    }
+
+
+    public void onTransactionWrite(CoordinatorServerMessages.TransactionWrite msg) {
+        Map.Entry<Resource, Boolean> t = processWorkspace(msg);
+        t.getKey().setValue(msg.value);
+        t.setValue(true);
+//        getSender().tell(new CoordinatorServerMessages.TransactionReadResponse(valueRead), getSelf());
+    }
+
 }
