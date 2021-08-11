@@ -4,8 +4,7 @@ package it.unitn.ds1.actors;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
-import it.unitn.ds1.Transaction;
-import it.unitn.ds1.messages.ClientCoordinatorMessages;
+import it.unitn.ds1.transactions.Transaction;
 import it.unitn.ds1.messages.CoordinatorServerMessages;
 import it.unitn.ds1.messages.Message;
 import scala.concurrent.duration.Duration;

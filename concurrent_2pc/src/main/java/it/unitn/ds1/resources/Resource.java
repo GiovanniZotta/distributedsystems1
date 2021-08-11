@@ -1,4 +1,4 @@
-package it.unitn.ds1;
+package it.unitn.ds1.resources;
 
 public class Resource implements Cloneable {
     private Integer value;

@@ -1,13 +1,14 @@
 package it.unitn.ds1.actors;
 
-import akka.actor.Actor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
-import it.unitn.ds1.Main;
-import it.unitn.ds1.Resource;
-import it.unitn.ds1.Transaction;
+import it.unitn.ds1.resources.Resource;
+import it.unitn.ds1.resources.WorkspaceResource;
+import it.unitn.ds1.transactions.ServerTransaction;
+import it.unitn.ds1.transactions.Transaction;
 import it.unitn.ds1.messages.CoordinatorServerMessages;
 import it.unitn.ds1.messages.Message;
+import it.unitn.ds1.transactions.Workspace;
 
 import java.util.*;
 
@@ -17,9 +18,8 @@ public class Server extends Node {
     public static final Integer DEFAULT_VALUE = 100;
     public static final Integer DB_SIZE = 10;
     private final Map<Integer, Resource> database;
-    private final Map<Transaction, Map<Integer, Map.Entry<Resource, Boolean>>> workspaces = new HashMap<>();
+    private final Map<Transaction, ServerTransaction> workspaces = new HashMap<>();
     private final Set<Integer> pendingResource = new HashSet<>();
-    private final Map<Transaction, ActorRef> transaction2coordinator = new HashMap<>();
 
     public Server(int id) {
         super(id);
@@ -52,10 +52,10 @@ public class Server extends Node {
     }
 
     private Boolean canCommit(Transaction transaction){
-        Map<Integer, Map.Entry<Resource, Boolean>> workspace = workspaces.get(transaction);
+        Workspace workspace = workspaces.get(transaction).getWorkspace();
 
-        for(Map.Entry<Integer, Map.Entry<Resource, Boolean>> entry : workspace.entrySet()) {
-            Integer version = entry.getValue().getKey().getVersion();
+        for(Map.Entry<Integer, WorkspaceResource> entry : workspace.entrySet()) {
+            Integer version = entry.getValue().getVersion();
             Integer key = entry.getKey();
             if(version != database.get(key).getVersion() || pendingResource.contains(key)) {
                 return false;
@@ -69,18 +69,17 @@ public class Server extends Node {
     private void freeWorkspace(Transaction transaction){
         freePendingResources(transaction);
         workspaces.remove(transaction);
-        transaction2coordinator.remove(transaction);
+//        transaction2coordinator.remove(transaction);
     }
 
     private void lockResources(Transaction transaction){
-        Map<Integer, Map.Entry<Resource, Boolean>> workspace = workspaces.get(transaction);
-        for(Integer key : workspace.keySet()) {
-            pendingResource.add(key);
-        }
+        Workspace workspace = workspaces.get(transaction).getWorkspace();
+        pendingResource.addAll(workspace.keySet());
     }
 
     private void freePendingResources(Transaction transaction){
-        Map<Integer, Map.Entry<Resource, Boolean>> workspace = workspaces.get(transaction);
+        Workspace workspace = workspaces.get(transaction).getWorkspace();
+
         for(Integer key : workspace.keySet()) {
             pendingResource.remove(key);
         }
@@ -95,7 +94,8 @@ public class Server extends Node {
             fixDecision(transaction, CoordinatorServerMessages.Decision.ABORT);
             vote = CoordinatorServerMessages.Vote.NO;
         } else {
-            transaction2coordinator.put(transaction, getSender());
+//          TODO: maybe this has to be done here instead of when creating the transaction?
+//          transaction2coordinator.put(transaction, getSender());
             lockResources(transaction);
             vote = CoordinatorServerMessages.Vote.YES;
         }
@@ -128,15 +128,15 @@ public class Server extends Node {
     }
 
     private void commitWorkspace(Transaction transaction){
-        Map<Integer, Map.Entry<Resource, Boolean>> workspace = workspaces.get(transaction);
+        Workspace workspace = workspaces.get(transaction).getWorkspace();
 
-        for(Map.Entry<Integer, Map.Entry<Resource, Boolean>> entry : workspace.entrySet()) {
+        for(Map.Entry<Integer, WorkspaceResource> entry : workspace.entrySet()) {
             Integer key = entry.getKey();
-            Integer value = entry.getValue().getKey().getValue();
-            Integer version = entry.getValue().getKey().getVersion();
-            Boolean changed = entry.getValue().getValue();
+            Integer value = entry.getValue().getValue();
+            Integer version = entry.getValue().getVersion();
+            Boolean changed = entry.getValue().getChanged();
 
-            assert(version == database.get(key).getVersion());
+            assert(version.equals(database.get(key).getVersion()));
             if(changed) {
                 database.get(key).setValue(value);
                 database.get(key).setVersion(version + 1);
@@ -163,32 +163,35 @@ public class Server extends Node {
         fixDecision(transaction, msg.decision);
     }
 
-    private Map.Entry<Resource, Boolean> processWorkspace(CoordinatorServerMessages.TransactionAction msg) {
+    private WorkspaceResource processWorkspace(CoordinatorServerMessages.TransactionAction msg) {
         // create workspace if the transaction is new
-        if (!workspaces.containsKey(msg.transaction)) {
-            workspaces.put(msg.transaction, new HashMap<>());
+        if(!workspaces.containsKey(msg.transaction)){
+            Integer clientId = msg.transaction.getTxnId().getKey();
+            Integer clientAttemptedTxn = msg.transaction.getTxnId().getValue();
+            ServerTransaction transaction = new ServerTransaction(clientId, clientAttemptedTxn, getSender());
+            workspaces.put(msg.transaction, transaction);
         }
 
-        Map<Integer, Map.Entry<Resource, Boolean>> ws = workspaces.get(msg.transaction);
-        if (!ws.containsKey(msg.key)) {
+        ServerTransaction transaction = workspaces.get(msg.transaction);
+        if(!transaction.getWorkspace().containsKey(msg.key)){
             Resource r = (Resource) database.get(msg.key).clone();
-            ws.put(msg.key, new AbstractMap.SimpleEntry<>(r, false));
+            transaction.getWorkspace().put(msg.key, new WorkspaceResource(r, false));
         }
-        return ws.get(msg.key);
+
+        return transaction.getWorkspace().get(msg.key);
     }
 
     public void onTransactionRead(CoordinatorServerMessages.TransactionRead msg) {
-        int valueRead = processWorkspace(msg).getKey().getValue();
+        int valueRead = processWorkspace(msg).getValue();
         getSender().tell(new CoordinatorServerMessages.TxnReadResponseMsg(msg.transaction, msg.key, valueRead),
                 getSelf());
     }
 
 
     public void onTransactionWrite(CoordinatorServerMessages.TransactionWrite msg) {
-        Map.Entry<Resource, Boolean> resource = processWorkspace(msg);
-        resource.getKey().setValue(msg.value);
-        // changed
-        resource.setValue(true);
+        WorkspaceResource resource = processWorkspace(msg);
+        resource.setValue(msg.value);
+        resource.setChanged(true);
 //        getSender().tell(new CoordinatorServerMessages.TransactionReadResponse(valueRead), getSelf());
     }
 

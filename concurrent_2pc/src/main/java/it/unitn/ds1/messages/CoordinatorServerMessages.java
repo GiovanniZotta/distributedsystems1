@@ -1,13 +1,8 @@
 package it.unitn.ds1.messages;
 
-import akka.actor.ActorRef;
-import it.unitn.ds1.Transaction;
-import it.unitn.ds1.messages.Message;
+import it.unitn.ds1.transactions.Transaction;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 public class CoordinatorServerMessages extends Message {
 

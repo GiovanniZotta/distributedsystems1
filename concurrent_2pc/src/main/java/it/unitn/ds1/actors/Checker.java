@@ -2,7 +2,7 @@ package it.unitn.ds1.actors;
 
 import akka.actor.ActorRef;
 import akka.actor.Props;
-import it.unitn.ds1.Transaction;
+import it.unitn.ds1.transactions.Transaction;
 import it.unitn.ds1.messages.CoordinatorServerMessages;
 import it.unitn.ds1.messages.Message;
 

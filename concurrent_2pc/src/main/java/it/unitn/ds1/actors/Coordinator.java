@@ -2,11 +2,11 @@ package it.unitn.ds1.actors;
 
 /*-- Coordinator -----------------------------------------------------------*/
 
-import akka.actor.Actor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
-import it.unitn.ds1.Main;
-import it.unitn.ds1.Transaction;
+import it.unitn.ds1.transactions.CoordinatorTransaction;
+import it.unitn.ds1.transactions.ServerTransaction;
+import it.unitn.ds1.transactions.Transaction;
 import it.unitn.ds1.messages.ClientCoordinatorMessages;
 import it.unitn.ds1.messages.CoordinatorServerMessages;
 import it.unitn.ds1.messages.Message;
@@ -16,15 +16,11 @@ import java.util.*;
 public class Coordinator extends Node {
 
     // here all the nodes that sent YES are collected
-    private final Set<ActorRef> yesVoters = new HashSet<>();
-    private final Map<ActorRef, Transaction> client2transaction = new HashMap<>();
-    // TODO: refactor
+    private final Map<ActorRef, CoordinatorTransaction> client2transaction = new HashMap<>();
     private final Map<Transaction, ActorRef> transaction2client = new HashMap<>();
-    private final Map<Transaction, Set<ActorRef>> transaction2servers = new HashMap<>();
-    private final Map<Transaction, Set<ActorRef>> transaction2yesVoters = new HashMap<>();
 
-    boolean allVotedYes(Transaction transaction) { // returns true if all voted YES
-        return transaction2yesVoters.get(transaction).size() == transaction2servers.get(transaction).size();
+    boolean allVotedYes(CoordinatorTransaction transaction) { // returns true if all voted YES
+        return transaction.getYesVoters().size() == transaction.getServers().size();
     }
 
     public Coordinator(int id) {
@@ -69,8 +65,13 @@ public class Coordinator extends Node {
         }
     }
 
+    private CoordinatorTransaction getSTfromTransaction(Transaction transaction){
+        ActorRef c = transaction2client.get(transaction);
+        return client2transaction.get(c);
+    }
+
     public void onVoteResponse(CoordinatorServerMessages.VoteResponse msg) {                    /* Vote */
-        Transaction transaction = msg.transaction;
+        CoordinatorTransaction transaction = getSTfromTransaction(msg.transaction);
         if (hasDecided(transaction)) {
             // we have already decided and sent the decision to the group,
             // so do not care about other votes
@@ -78,18 +79,18 @@ public class Coordinator extends Node {
         }
         CoordinatorServerMessages.Vote v = (msg).vote;
         if (v == CoordinatorServerMessages.Vote.YES) {
-            transaction2yesVoters.get(transaction).add(getSender());
+            transaction.getYesVoters().add(getSender());
             if (allVotedYes(transaction)) {
                 fixDecision(transaction, CoordinatorServerMessages.Decision.COMMIT);
                 //if (id==-1) {crash(3000); return;}
-                multicast(new CoordinatorServerMessages.DecisionResponse(transaction, transaction2decision.get(transaction)), transaction2servers.get(transaction));
+                multicast(new CoordinatorServerMessages.DecisionResponse(transaction, transaction2decision.get(transaction)), transaction.getServers());
 //                multicastAndCrash(new CoordinatorServerMessages.DecisionResponse(transaction2decision.get(transaction)), 3000);
             }
         } else { // a NO vote
 
             // on a single NO we decide ABORT
             fixDecision(transaction, CoordinatorServerMessages.Decision.ABORT);
-            multicast(new CoordinatorServerMessages.DecisionResponse(transaction, transaction2decision.get(transaction)), transaction2servers.get(transaction));
+            multicast(new CoordinatorServerMessages.DecisionResponse(transaction, transaction2decision.get(transaction)), transaction.getServers());
         }
     }
 
@@ -111,7 +112,7 @@ public class Coordinator extends Node {
 
     public void onTxnBeginMsg(ClientCoordinatorMessages.TxnBeginMsg msg) {
         // initialize transaction
-        Transaction t = new Transaction(msg.clientId, msg.numAttemptedTxn);
+        CoordinatorTransaction t = new CoordinatorTransaction(msg.clientId, msg.numAttemptedTxn, getSender());
         client2transaction.put(getSender(), t);
         transaction2client.put(t, getSender());
         // send accept
@@ -119,11 +120,9 @@ public class Coordinator extends Node {
     }
 
     public void onTxnEndMsg(ClientCoordinatorMessages.TxnEndMsg msg) {
-        Transaction transaction = client2transaction.get(getSender());
-        Set<ActorRef> servers = transaction2servers.get(transaction);
-        transaction2yesVoters.put(transaction, new HashSet<>());
+        CoordinatorTransaction transaction = client2transaction.get(getSender());
 
-        multicast(new CoordinatorServerMessages.VoteRequest(transaction), servers);
+        multicast(new CoordinatorServerMessages.VoteRequest(transaction), transaction.getServers());
 //        print("Sending vote requests");
 //        multicast(new CoordinatorServerMessages.VoteRequest());
 //      multicastAndCrash(new VoteRequest(), 3000);
@@ -131,17 +130,14 @@ public class Coordinator extends Node {
 //      crash(5000);
     }
 
-    private void trackServerForTxn(Transaction transaction, Integer serverId){
-        if(!transaction2servers.containsKey(transaction)){
-            transaction2servers.put(transaction, new HashSet<>());
-        }
-        transaction2servers.get(transaction).add(servers.get(serverId));
+    private void trackServerForTxn(CoordinatorTransaction transaction, Integer serverId){
+        transaction.getServers().add(servers.get(serverId));
     }
 
     public void onReadMsg (ClientCoordinatorMessages.ReadMsg msg) {
         int key = msg.key;
         int serverId = key / Server.DB_SIZE;
-        Transaction transaction = client2transaction.get(getSender());
+        CoordinatorTransaction transaction = client2transaction.get(getSender());
         trackServerForTxn(transaction, serverId);
         servers.get(serverId).tell(new CoordinatorServerMessages.TransactionRead(transaction, key), getSelf());
     }
@@ -155,7 +151,7 @@ public class Coordinator extends Node {
         int key = msg.key;
         int value = msg.value;
         int serverId = key / Server.DB_SIZE;
-        Transaction transaction = client2transaction.get(getSender());
+        CoordinatorTransaction transaction = client2transaction.get(getSender());
         trackServerForTxn(transaction, serverId);
         servers.get(serverId).tell(new CoordinatorServerMessages.TransactionWrite(transaction, key, value), getSelf());
     }
