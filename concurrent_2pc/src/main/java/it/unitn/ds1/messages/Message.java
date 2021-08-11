@@ -1,6 +1,7 @@
 package it.unitn.ds1.messages;
 
 import akka.actor.ActorRef;
+import it.unitn.ds1.actors.Checker;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -28,5 +29,16 @@ public class Message {
         public CheckCorrectnessResponse(Integer value) {
             this.value = value;
         }
+    }
+
+    public static class CheckerMsg implements Serializable {
+        public final ActorRef checker;
+
+        public CheckerMsg(ActorRef checker) {
+            this.checker = checker;
+        }
+    }
+
+    public static class StopMsg implements Serializable {
     }
 }

@@ -4,6 +4,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import akka.actor.*;
+import it.unitn.ds1.Main;
 import it.unitn.ds1.messages.ClientCoordinatorMessages;
 import it.unitn.ds1.messages.Message;
 import scala.concurrent.duration.Duration;
@@ -11,8 +12,8 @@ import scala.concurrent.duration.Duration;
 public class Client extends AbstractActor {
     private static final double COMMIT_PROBABILITY = 0.8;
     private static final double WRITE_PROBABILITY = 0.5;
-    private static final int MIN_TXN_LENGTH = 2;
-    private static final int MAX_TXN_LENGTH = 4;
+    private static final int MIN_TXN_LENGTH = 20;
+    private static final int MAX_TXN_LENGTH = 40;
     private static final int RAND_LENGTH_RANGE = MAX_TXN_LENGTH - MIN_TXN_LENGTH + 1;
 
     private final Integer clientId;
@@ -76,7 +77,8 @@ public class Client extends AbstractActor {
                 new ClientCoordinatorMessages.TxnAcceptTimeoutMsg(), // message sent to myself
                 getContext().system().dispatcher(), getSelf()
         );
-        System.out.println("CLIENT " + clientId + " BEGIN");
+        if(Main.CLIENT_DEBUG_BEGIN_TXN)
+            System.out.println("CLIENT " + clientId + " BEGIN");
     }
 
     // end the current TXN sending TxnEndMsg to the coordinator
@@ -85,7 +87,8 @@ public class Client extends AbstractActor {
         currentCoordinator.tell(new ClientCoordinatorMessages.TxnEndMsg(clientId, doCommit), getSelf());
         firstValue = null;
         secondValue = null;
-        System.out.println("CLIENT " + clientId + " END");
+        if(Main.CLIENT_DEBUG_END_TXN)
+            System.out.println("CLIENT " + clientId + " END");
     }
 
     // READ two items (will move some amount from the value of the first to the second)
@@ -102,8 +105,8 @@ public class Client extends AbstractActor {
         // delete the current read values
         firstValue = null;
         secondValue = null;
-
-        System.out.println("CLIENT " + clientId + " READ #"+ numOpDone + " (" + firstKey + "), (" + secondKey + ")");
+        if(Main.CLIENT_DEBUG_READ_TXN)
+            System.out.println("CLIENT " + clientId + " READ #"+ numOpDone + " (" + firstKey + "), (" + secondKey + ")");
     }
 
     // WRITE two items (called with probability WRITE_PROBABILITY after readTwo() values are returned)
@@ -114,7 +117,8 @@ public class Client extends AbstractActor {
         if(firstValue >= 1) amountTaken = 1 + r.nextInt(firstValue);
         currentCoordinator.tell(new ClientCoordinatorMessages.WriteMsg(clientId, firstKey, firstValue - amountTaken), getSelf());
         currentCoordinator.tell(new ClientCoordinatorMessages.WriteMsg(clientId, secondKey, secondValue + amountTaken), getSelf());
-        System.out.println("CLIENT " + clientId + " WRITE #"+ numOpDone
+        if(Main.CLIENT_DEBUG_WRITE_TXN)
+            System.out.println("CLIENT " + clientId + " WRITE #"+ numOpDone
                 + " taken " + amountTaken
                 + " (" + firstKey + ", " + (firstValue - amountTaken) + "), ("
                 + secondKey + ", " + (secondValue + amountTaken) + ")");
@@ -129,7 +133,9 @@ public class Client extends AbstractActor {
         beginTxn();
     }
 
-    private void onStopMsg(ClientCoordinatorMessages.StopMsg msg) {
+    private void onStopMsg(Message.StopMsg msg) {
+        System.out.println("CLIENT " + clientId + " SUCCESSFUL COMMITS: ("
+        + numCommittedTxn + "/" + numAttemptedTxn + ")");
         getContext().stop(getSelf());
     }
 
@@ -144,7 +150,8 @@ public class Client extends AbstractActor {
     }
 
     private void onReadResultMsg(ClientCoordinatorMessages.ReadResultMsg msg) {
-        System.out.println("CLIENT " + clientId + " READ RESULT (" + msg.key + ", " + msg.value + ")");
+        if(Main.CLIENT_DEBUG_READ_RESULT)
+            System.out.println("CLIENT " + clientId + " READ RESULT (" + msg.key + ", " + msg.value + ")");
 
         // save the read value(s)
         if(msg.key.equals(firstKey)) firstValue = msg.value;
@@ -168,12 +175,13 @@ public class Client extends AbstractActor {
     }
 
     private void onTxnResultMsg(ClientCoordinatorMessages.TxnResultMsg msg) throws InterruptedException {
-        if(msg.commit) {
+        if (msg.commit) {
             numCommittedTxn++;
-            System.out.println("CLIENT " + clientId + " COMMIT OK ("+numCommittedTxn+"/"+numAttemptedTxn+")");
-        }
-        else {
-            System.out.println("CLIENT " + clientId + " COMMIT FAIL ("+(numAttemptedTxn - numCommittedTxn)+"/"+numAttemptedTxn+")");
+            if(Main.CLIENT_DEBUG_COMMIT_OK)
+                System.out.println("CLIENT " + clientId + " COMMIT OK (" + numCommittedTxn + "/" + numAttemptedTxn + ")");
+        } else {
+            if(Main.CLIENT_DEBUG_COMMIT_KO)
+                System.out.println("CLIENT " + clientId + " COMMIT FAIL (" + (numAttemptedTxn - numCommittedTxn) + "/" + numAttemptedTxn + ")");
         }
         beginTxn();
     }

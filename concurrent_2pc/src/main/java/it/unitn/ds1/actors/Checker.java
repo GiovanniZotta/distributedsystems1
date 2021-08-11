@@ -50,13 +50,16 @@ public class Checker extends Node {
         }
     }
 
-    public void onCheckCorrectnessResponse (Message.CheckCorrectnessResponse msg) {
+    public void onCheckCorrectnessResponse (Message.CheckCorrectnessResponse msg) throws InterruptedException {
         counter++;
         partialSum += msg.value;
         if(counter == numServers){
+            Thread.sleep(3000);
             System.out.println("##### CORRECTNESS CHECK #####");
-            System.out.println("CORRECT SUM: " + numServers * (Server.DB_SIZE * Server.DEFAULT_VALUE));
+            Integer correctSum = numServers * (Server.DB_SIZE * Server.DEFAULT_VALUE);
+            System.out.println("CORRECT SUM: " + correctSum);
             System.out.println("ACTUAL SUM: " + partialSum);
+            assert(partialSum == correctSum);
             System.out.println("##### CORRECTNESS CHECK #####");
         }
     }

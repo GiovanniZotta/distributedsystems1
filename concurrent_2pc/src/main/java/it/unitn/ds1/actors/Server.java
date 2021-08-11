@@ -1,7 +1,7 @@
 package it.unitn.ds1.actors;
 
-import akka.actor.ActorRef;
 import akka.actor.Props;
+import it.unitn.ds1.Main;
 import it.unitn.ds1.resources.Resource;
 import it.unitn.ds1.resources.WorkspaceResource;
 import it.unitn.ds1.transactions.ServerTransaction;
@@ -18,8 +18,8 @@ public class Server extends Node {
     public static final Integer DEFAULT_VALUE = 100;
     public static final Integer DB_SIZE = 10;
     private final Map<Integer, Resource> database;
-    private final Map<Transaction, ServerTransaction> workspaces = new HashMap<>();
-    private final Set<Integer> pendingResource = new HashSet<>();
+    private final Map<Transaction, ServerTransaction> transactionMap = new HashMap<>();
+    private final Map<Integer, Transaction> pendingResource = new HashMap<>();
 
     public Server(int id) {
         super(id);
@@ -52,12 +52,12 @@ public class Server extends Node {
     }
 
     private Boolean canCommit(Transaction transaction){
-        Workspace workspace = workspaces.get(transaction).getWorkspace();
+        Workspace workspace = transactionMap.get(transaction).getWorkspace();
 
         for(Map.Entry<Integer, WorkspaceResource> entry : workspace.entrySet()) {
             Integer version = entry.getValue().getVersion();
             Integer key = entry.getKey();
-            if(version != database.get(key).getVersion() || pendingResource.contains(key)) {
+            if(version != database.get(key).getVersion() || pendingResource.containsKey(key)) {
                 return false;
             }
         }
@@ -68,20 +68,24 @@ public class Server extends Node {
 
     private void freeWorkspace(Transaction transaction){
         freePendingResources(transaction);
-        workspaces.remove(transaction);
+        transactionMap.remove(transaction);
 //        transaction2coordinator.remove(transaction);
     }
 
     private void lockResources(Transaction transaction){
-        Workspace workspace = workspaces.get(transaction).getWorkspace();
-        pendingResource.addAll(workspace.keySet());
+        Workspace workspace = transactionMap.get(transaction).getWorkspace();
+        for(Integer key : workspace.keySet()){
+            pendingResource.put(key, transaction);
+        }
     }
 
     private void freePendingResources(Transaction transaction){
-        Workspace workspace = workspaces.get(transaction).getWorkspace();
+        Workspace workspace = transactionMap.get(transaction).getWorkspace();
 
         for(Integer key : workspace.keySet()) {
-            pendingResource.remove(key);
+            if(pendingResource.get(key) != null && pendingResource.get(key).equals(transaction)) {
+                pendingResource.remove(key);
+            }
         }
     }
 
@@ -94,13 +98,11 @@ public class Server extends Node {
             fixDecision(transaction, CoordinatorServerMessages.Decision.ABORT);
             vote = CoordinatorServerMessages.Vote.NO;
         } else {
-//          TODO: maybe this has to be done here instead of when creating the transaction?
-//          transaction2coordinator.put(transaction, getSender());
             lockResources(transaction);
             vote = CoordinatorServerMessages.Vote.YES;
         }
-
-        print("Server " + id + " sending vote " + vote);
+        if(Main.SERVER_DEBUG_SEND_VOTE)
+            print("Server " + id + " sending vote " + vote);
         getSender().tell(new CoordinatorServerMessages.VoteResponse(transaction, vote), getSelf());
 //        setTimeout(Main.DECISION_TIMEOUT);
     }
@@ -128,7 +130,7 @@ public class Server extends Node {
     }
 
     private void commitWorkspace(Transaction transaction){
-        Workspace workspace = workspaces.get(transaction).getWorkspace();
+        Workspace workspace = transactionMap.get(transaction).getWorkspace();
 
         for(Map.Entry<Integer, WorkspaceResource> entry : workspace.entrySet()) {
             Integer key = entry.getKey();
@@ -148,7 +150,8 @@ public class Server extends Node {
     void fixDecision(Transaction transaction, CoordinatorServerMessages.Decision d) {
         if (!hasDecided(transaction)) {
             transaction2decision.put(transaction, d);
-            print("decided " + d);
+            if(Main.SERVER_DEBUG_DECIDED)
+                print(" Server decided " + d);
             if(d == CoordinatorServerMessages.Decision.COMMIT){
                 commitWorkspace(transaction);
             }
@@ -165,14 +168,14 @@ public class Server extends Node {
 
     private WorkspaceResource processWorkspace(CoordinatorServerMessages.TransactionAction msg) {
         // create workspace if the transaction is new
-        if(!workspaces.containsKey(msg.transaction)){
+        if(!transactionMap.containsKey(msg.transaction)){
             Integer clientId = msg.transaction.getTxnId().getKey();
             Integer clientAttemptedTxn = msg.transaction.getTxnId().getValue();
             ServerTransaction transaction = new ServerTransaction(clientId, clientAttemptedTxn, getSender());
-            workspaces.put(msg.transaction, transaction);
+            transactionMap.put(msg.transaction, transaction);
         }
 
-        ServerTransaction transaction = workspaces.get(msg.transaction);
+        ServerTransaction transaction = transactionMap.get(msg.transaction);
         if(!transaction.getWorkspace().containsKey(msg.key)){
             Resource r = (Resource) database.get(msg.key).clone();
             transaction.getWorkspace().put(msg.key, new WorkspaceResource(r, false));

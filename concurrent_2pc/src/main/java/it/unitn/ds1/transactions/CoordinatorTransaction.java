@@ -7,7 +7,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-public class CoordinatorTransaction extends Transaction{
+public class CoordinatorTransaction extends Transaction {
     private final ActorRef client;
     private final Set<ActorRef> servers;
     private final Set<ActorRef> yesVoters;

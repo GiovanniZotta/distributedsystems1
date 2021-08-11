@@ -1,6 +1,7 @@
 package it.unitn.ds1.resources;
 
 public class WorkspaceResource extends Resource {
+
     Boolean changed;
 
     public WorkspaceResource(Resource resource, Boolean changed) {

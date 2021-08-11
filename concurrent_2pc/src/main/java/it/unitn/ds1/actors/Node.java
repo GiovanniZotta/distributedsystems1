@@ -4,6 +4,7 @@ package it.unitn.ds1.actors;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
+import it.unitn.ds1.Main;
 import it.unitn.ds1.transactions.Transaction;
 import it.unitn.ds1.messages.CoordinatorServerMessages;
 import it.unitn.ds1.messages.Message;
@@ -16,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 public abstract class Node extends AbstractActor {
     protected int id;                           // node ID
     protected List<ActorRef> servers;      // list of participant nodes
+    protected ActorRef checker;
     protected final Map<Transaction, CoordinatorServerMessages.Decision> transaction2decision;
 
     public Node(int id) {
@@ -36,13 +38,15 @@ public abstract class Node extends AbstractActor {
                 this.servers.add(b);
             }
         }
-        print("starting with " + sm.group.size() + " peer(s)");
+        if(Main.NODE_DEBUG_STARTING_SIZE)
+            print("starting with " + sm.group.size() + " peer(s)");
     }
 
     // emulate a crash and a recovery in a given time
     void crash(int recoverIn) {
         getContext().become(crashed());
-        print("CRASH!!!");
+        if(Main.NODE_DEBUG_CRASH)
+            print("CRASH!!!");
 
         // setting a timer to "recover"
         getContext().system().scheduler().scheduleOnce(
@@ -106,9 +110,14 @@ public abstract class Node extends AbstractActor {
     public Receive crashed() {
         return receiveBuilder()
                 .match(CoordinatorServerMessages.Recovery.class, this::onRecovery)
+                .match(Message.CheckerMsg.class, this::onCheckerMsg)
                 .matchAny(msg -> {
                 })
                 .build();
+    }
+
+    private void onCheckerMsg(Message.CheckerMsg msg){
+        this.checker = msg.checker;
     }
 
     public void onDecisionRequest(CoordinatorServerMessages.DecisionRequest msg) {  /* Decision Request */

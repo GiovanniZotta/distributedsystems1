@@ -10,8 +10,6 @@ import java.util.List;
 
 public class ClientCoordinatorMessages extends Message {
 
-    // stop the client
-    public static class StopMsg implements Serializable {}
 
     // message the client sends to a coordinator to begin the TXN
     public static class TxnBeginMsg implements Serializable {

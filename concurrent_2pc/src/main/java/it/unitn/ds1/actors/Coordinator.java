@@ -4,6 +4,7 @@ package it.unitn.ds1.actors;
 
 import akka.actor.ActorRef;
 import akka.actor.Props;
+import it.unitn.ds1.Main;
 import it.unitn.ds1.transactions.CoordinatorTransaction;
 import it.unitn.ds1.transactions.ServerTransaction;
 import it.unitn.ds1.transactions.Transaction;
@@ -61,7 +62,9 @@ public class Coordinator extends Node {
         if (!hasDecided(transaction)) {
             transaction2decision.put(transaction, d);
             transaction2client.get(transaction).tell(new ClientCoordinatorMessages.TxnResultMsg(d == CoordinatorServerMessages.Decision.COMMIT), getSelf());
-            print("decided " + d);
+            if(Main.COORD_DEBUG_DECISION)
+                print("Coordinator " + this.id + " decided " + d
+                + " on transaction " + transaction.getTxnId());
         }
     }
 
@@ -81,16 +84,13 @@ public class Coordinator extends Node {
         if (v == CoordinatorServerMessages.Vote.YES) {
             transaction.getYesVoters().add(getSender());
             if (allVotedYes(transaction)) {
-                fixDecision(transaction, CoordinatorServerMessages.Decision.COMMIT);
+                takeDecision(transaction, CoordinatorServerMessages.Decision.COMMIT);
                 //if (id==-1) {crash(3000); return;}
-                multicast(new CoordinatorServerMessages.DecisionResponse(transaction, transaction2decision.get(transaction)), transaction.getServers());
 //                multicastAndCrash(new CoordinatorServerMessages.DecisionResponse(transaction2decision.get(transaction)), 3000);
             }
         } else { // a NO vote
-
             // on a single NO we decide ABORT
-            fixDecision(transaction, CoordinatorServerMessages.Decision.ABORT);
-            multicast(new CoordinatorServerMessages.DecisionResponse(transaction, transaction2decision.get(transaction)), transaction.getServers());
+            takeDecision(transaction, CoordinatorServerMessages.Decision.ABORT);
         }
     }
 
@@ -119,10 +119,19 @@ public class Coordinator extends Node {
         getSender().tell(new ClientCoordinatorMessages.TxnAcceptMsg(), getSelf());
     }
 
+    private void takeDecision(Transaction transaction, CoordinatorServerMessages.Decision decision){
+        CoordinatorTransaction transaction1 = getSTfromTransaction(transaction);
+        fixDecision(transaction1, decision);
+        multicast(new CoordinatorServerMessages.DecisionResponse(transaction1, transaction2decision.get(transaction1)), transaction1.getServers());
+    }
+
     public void onTxnEndMsg(ClientCoordinatorMessages.TxnEndMsg msg) {
         CoordinatorTransaction transaction = client2transaction.get(getSender());
-
-        multicast(new CoordinatorServerMessages.VoteRequest(transaction), transaction.getServers());
+        if(msg.commit){
+            multicast(new CoordinatorServerMessages.VoteRequest(transaction), transaction.getServers());
+        } else {
+            takeDecision(transaction, CoordinatorServerMessages.Decision.ABORT);
+        }
 //        print("Sending vote requests");
 //        multicast(new CoordinatorServerMessages.VoteRequest());
 //      multicastAndCrash(new VoteRequest(), 3000);

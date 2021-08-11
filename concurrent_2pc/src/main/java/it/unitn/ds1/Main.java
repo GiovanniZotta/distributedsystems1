@@ -15,19 +15,26 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Main {
-    public final static int N_CLIENTS = 2;
+    public final static int N_CLIENTS = 5;
     public final static int N_COORDINATORS = 3;
-    public final static int N_SERVER = 50;
+    public final static int N_SERVER = 5;
     public final static int MAX_KEY = N_SERVER * Server.DB_SIZE - 1;
+    public final static Boolean CLIENT_DEBUG_BEGIN_TXN = false;
+    public final static Boolean CLIENT_DEBUG_END_TXN = false;
+    public final static Boolean CLIENT_DEBUG_READ_TXN = false;
+    public final static Boolean CLIENT_DEBUG_WRITE_TXN = false;
+    public final static Boolean CLIENT_DEBUG_READ_RESULT = false;
+    public final static Boolean CLIENT_DEBUG_COMMIT_OK = false;
+    public final static Boolean CLIENT_DEBUG_COMMIT_KO = false;
+    public final static Boolean SERVER_DEBUG_SEND_VOTE = false;
+    public final static Boolean SERVER_DEBUG_DECIDED = false;
+    public final static Boolean COORD_DEBUG_DECISION = false;
+    public final static Boolean NODE_DEBUG_STARTING_SIZE = false;
+    public final static Boolean NODE_DEBUG_CRASH = false;
+
 
     public final static int VOTE_TIMEOUT = 1000;      // timeout for the votes, ms
     public final static int DECISION_TIMEOUT = 2000;  // timeout for the decision, ms
-
-    // the votes that the participants will send (for testing)
-    public final static Vote[] predefinedVotes =
-            new Vote[]{Vote.YES, Vote.YES, Vote.YES}; // as many as N_PARTICIPANTS
-
-
 
     /*-- Main ------------------------------------------------------------------*/
     public static void main(String[] args) {
@@ -58,6 +65,7 @@ public class Main {
 
 
         // Send start messages to the clients
+        Message.CheckerMsg checkerMsg = new Message.CheckerMsg(checker);
         Message.WelcomeMsg startClients = new Message.WelcomeMsg(MAX_KEY, coordinators);
         for (ActorRef peer : clients) {
             peer.tell(startClients, null);
@@ -66,11 +74,13 @@ public class Main {
         // Send start messages to the group
         Message.WelcomeMsg startOthers = new Message.WelcomeMsg(MAX_KEY, servers);
         for (ActorRef peer : coordinators) {
+            peer.tell(checkerMsg, null);
             peer.tell(startOthers, null);
         }
 
         // Send start messages to the servers
         for (ActorRef peer : servers) {
+            peer.tell(checkerMsg, null);
             peer.tell(startOthers, null);
         }
         checker.tell(startOthers, null);
@@ -79,6 +89,11 @@ public class Main {
             System.out.println(">>> Press ENTER to exit <<<");
             System.in.read();
         } catch (IOException ignored) {
+        }
+
+        Message.StopMsg stopMsg = new Message.StopMsg();
+        for (ActorRef peer : clients) {
+            peer.tell(stopMsg, null);
         }
 
         checker.tell(new Message.CheckCorrectness(), null);
