@@ -15,15 +15,19 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public abstract class Node extends AbstractActor {
+
+    public enum CrashPhase {ZERO_MESSAGES, RANDOM_MESSAGES, ALL_MESSAGES}
     protected int id;                           // node ID
     protected List<ActorRef> servers;      // list of participant nodes
     protected ActorRef checker;
     protected final Map<Transaction, CoordinatorServerMessages.Decision> transaction2decision;
+    protected final Random r;
 
     public Node(int id) {
         super();
         this.id = id;
         transaction2decision = new HashMap<>();
+        r = new Random();
     }
 
     // abstract method to be implemented in extending classes
@@ -71,13 +75,7 @@ public abstract class Node extends AbstractActor {
     }
 
     // a multicast implementation that crashes after sending the first message
-    void multicastAndCrash(Serializable m, int recoverIn) {
-        for (ActorRef p : servers) {
-            p.tell(m, getSelf());
-            crash(recoverIn);
-            return;
-        }
-    }
+    void abstract multicastAndCrash(Serializable m, int recoverIn, CrashPhase phase);
 
     // schedule a Timeout message in specified time
     void setTimeout(int time) {

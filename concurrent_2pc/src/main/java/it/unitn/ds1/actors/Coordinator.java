@@ -19,6 +19,10 @@ public class Coordinator extends Node {
     // here all the nodes that sent YES are collected
     private final Map<ActorRef, CoordinatorTransaction> client2transaction = new HashMap<>();
     private final Map<Transaction, ActorRef> transaction2client = new HashMap<>();
+    private final Set<Transaction> pendingTransactions = new HashSet<>();
+    public Integer crashAfterZero = 0;
+    public Integer crashAfterRandom = 0;
+    public Integer crashAfterAll = 0;
 
     boolean allVotedYes(CoordinatorTransaction transaction) { // returns true if all voted YES
         return transaction.getYesVoters().size() == transaction.getServers().size();
@@ -48,6 +52,37 @@ public class Coordinator extends Node {
                 .build();
     }
 
+    void multicastAndCrash(Serializable m, int recoverIn, CrashPhase phase){
+        Integer crashAfter = 0;
+        switch(phase){
+            case CrashPhase.ZERO_MESSAGES:
+                if(Main.DEBUG_MULT_CRASH_ZERO){
+                    print("CRASH AFTER ZERO MESSAGES");
+                }
+                crash(recoverIn);
+                return;
+            case CrashPhase.RANDOM_MESSAGES:
+                crashAfter = r.nextInt(Main.N_SERVER - 1);
+                if(Main.DEBUG_MULT_CRASH_RANDOM)
+                    print("CRASH AFTER " + crashAfter + " MESSAGES");
+                break;
+            case CrashPhase.ALL_MESSAGES:
+                crashAfter = Main.N_SERVER - 1;
+                if(Main.DEBUG_MULT_CRASH_ALL)
+                    print("CRASH AFTER ALL MESSAGES");
+                break;
+        }
+        Integer i = 0;
+        for (ActorRef p : servers) {
+            p.tell(m, getSelf());
+            if(i == crashAfter){
+                crash(recoverIn);
+                return;
+            }
+            i++;
+        }
+    }
+
     public void onWelcomeMsg(Message.WelcomeMsg msg) {                   /* Start */
         setGroup(msg);
     }
@@ -62,6 +97,7 @@ public class Coordinator extends Node {
         if (!hasDecided(transaction)) {
             transaction2decision.put(transaction, d);
             transaction2client.get(transaction).tell(new ClientCoordinatorMessages.TxnResultMsg(d == CoordinatorServerMessages.Decision.COMMIT), getSelf());
+            pendingTransactions.remove(transaction);
             if(Main.COORD_DEBUG_DECISION)
                 print("Coordinator " + this.id + " decided " + d
                 + " on transaction " + transaction.getTxnId());
@@ -115,6 +151,7 @@ public class Coordinator extends Node {
         CoordinatorTransaction t = new CoordinatorTransaction(msg.clientId, msg.numAttemptedTxn, getSender());
         client2transaction.put(getSender(), t);
         transaction2client.put(t, getSender());
+        pendingTransactions.add(t);
         // send accept
         getSender().tell(new ClientCoordinatorMessages.TxnAcceptMsg(), getSelf());
     }

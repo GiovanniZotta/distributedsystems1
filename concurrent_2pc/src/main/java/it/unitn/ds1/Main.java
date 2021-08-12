@@ -31,6 +31,9 @@ public class Main {
     public final static Boolean COORD_DEBUG_DECISION = false;
     public final static Boolean NODE_DEBUG_STARTING_SIZE = false;
     public final static Boolean NODE_DEBUG_CRASH = false;
+    public final static Boolean DEBUG_MULT_CRASH_ZERO = false;
+    public final static Boolean DEBUG_MULT_CRASH_RANDOM = false;
+    public final static Boolean DEBUG_MULT_CRASH_ALL = false;
 
 
     public final static int VOTE_TIMEOUT = 1000;      // timeout for the votes, ms
