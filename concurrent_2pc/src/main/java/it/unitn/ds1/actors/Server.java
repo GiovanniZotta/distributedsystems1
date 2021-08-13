@@ -10,6 +10,7 @@ import it.unitn.ds1.messages.CoordinatorServerMessages;
 import it.unitn.ds1.messages.Message;
 import it.unitn.ds1.transactions.Workspace;
 
+import java.io.Serializable;
 import java.util.*;
 
 
@@ -127,6 +128,11 @@ public class Server extends Node {
 //            coordinator.tell(new CoordinatorServerMessages.DecisionRequest(), getSelf());
 //            setTimeout(Main.DECISION_TIMEOUT);
 //        }
+    }
+
+    @Override
+    void multicastAndCrash(Serializable m, int recoverIn, CrashPhase phase) {
+
     }
 
     private void commitWorkspace(Transaction transaction){

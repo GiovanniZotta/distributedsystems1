@@ -12,6 +12,7 @@ import it.unitn.ds1.messages.ClientCoordinatorMessages;
 import it.unitn.ds1.messages.CoordinatorServerMessages;
 import it.unitn.ds1.messages.Message;
 
+import java.io.Serializable;
 import java.util.*;
 
 public class Coordinator extends Node {
@@ -55,18 +56,18 @@ public class Coordinator extends Node {
     void multicastAndCrash(Serializable m, int recoverIn, CrashPhase phase){
         Integer crashAfter = 0;
         switch(phase){
-            case CrashPhase.ZERO_MESSAGES:
+            case ZERO_MESSAGES:
                 if(Main.DEBUG_MULT_CRASH_ZERO){
                     print("CRASH AFTER ZERO MESSAGES");
                 }
                 crash(recoverIn);
                 return;
-            case CrashPhase.RANDOM_MESSAGES:
+            case RANDOM_MESSAGES:
                 crashAfter = r.nextInt(Main.N_SERVER - 1);
                 if(Main.DEBUG_MULT_CRASH_RANDOM)
                     print("CRASH AFTER " + crashAfter + " MESSAGES");
                 break;
-            case CrashPhase.ALL_MESSAGES:
+            case ALL_MESSAGES:
                 crashAfter = Main.N_SERVER - 1;
                 if(Main.DEBUG_MULT_CRASH_ALL)
                     print("CRASH AFTER ALL MESSAGES");

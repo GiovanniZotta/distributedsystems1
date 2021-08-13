@@ -6,6 +6,8 @@ import it.unitn.ds1.transactions.Transaction;
 import it.unitn.ds1.messages.CoordinatorServerMessages;
 import it.unitn.ds1.messages.Message;
 
+import java.io.Serializable;
+
 
 /*-- Participant -----------------------------------------------------------*/
 public class Checker extends Node {
@@ -21,6 +23,11 @@ public class Checker extends Node {
 
     @Override
     protected void onRecovery(CoordinatorServerMessages.Recovery msg) {
+
+    }
+
+    @Override
+    void multicastAndCrash(Serializable m, int recoverIn, CrashPhase phase){
 
     }
 

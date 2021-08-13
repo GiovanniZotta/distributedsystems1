@@ -75,7 +75,7 @@ public abstract class Node extends AbstractActor {
     }
 
     // a multicast implementation that crashes after sending the first message
-    void abstract multicastAndCrash(Serializable m, int recoverIn, CrashPhase phase);
+    abstract void multicastAndCrash(Serializable m, int recoverIn, CrashPhase phase);
 
     // schedule a Timeout message in specified time
     void setTimeout(int time) {
