@@ -47,17 +47,20 @@ public class Checker extends AbstractActor {
     }
 
     public void onCheckCorrectness(Message.CheckCorrectness msg) {
-        for(ActorRef server : servers){
-            server.tell(new Message.CheckCorrectness(), getSelf());
-        }
 
         for(ActorRef coordinator : coordinators){
             coordinator.tell(new Message.CheckCorrectness(), getSelf());
         }
+
+        for(ActorRef server : servers){
+            server.tell(new Message.CheckCorrectness(), getSelf());
+        }
+
     }
 
     private void printCrashes(Map<ActorRef, Node.CrashPhaseMap> numCoordinatorCrashes) {
-        System.out.println(Node.CrashPhaseMap.sumMaps(numCoordinatorCrashes.values()));
+        System.out.println(numCoordinatorCrashes.values());
+        System.out.println(Node.CrashPhaseMap.sumMaps(numCoordinatorCrashes.values()).size());
     }
 
     private void manageServer(Message.CheckCorrectnessResponse msg) throws InterruptedException {
@@ -65,13 +68,13 @@ public class Checker extends AbstractActor {
         counterServers++;
         numServerCrashes.put(getSender(), msg.numCrashes);
         if (counterServers == servers.size()) {
-            Thread.sleep(3000);
             System.out.println("##### CORRECTNESS CHECK #####");
             Integer correctSum = servers.size() * (Server.DB_SIZE * Server.DEFAULT_VALUE);
             System.out.println("CORRECT SUM: " + correctSum);
             System.out.println("ACTUAL SUM: " + partialSum);
             assert (partialSum == correctSum);
             System.out.println("##### CORRECTNESS CHECK #####");
+            System.out.println("SERVER CRASHES");
             printCrashes(numServerCrashes);
         }
     }
@@ -80,7 +83,7 @@ public class Checker extends AbstractActor {
         counterCoordinators++;
         numCoordinatorCrashes.put(getSender(), msg.numCrashes);
         if (counterCoordinators == coordinators.size()) {
-            Thread.sleep(3000);
+            System.out.println("COORDINATOR CRASHES");
             printCrashes(numCoordinatorCrashes);
         }
     }
@@ -90,7 +93,7 @@ public class Checker extends AbstractActor {
     public void onCheckCorrectnessResponse (Message.CheckCorrectnessResponse msg) throws InterruptedException {
         if (coordinators.contains(getSender())){
             manageCoordinator(msg);
-        } else {
+        } else if (servers.contains(getSender())){
             manageServer(msg);
         }
     }

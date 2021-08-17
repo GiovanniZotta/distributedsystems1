@@ -55,7 +55,6 @@ public class Coordinator extends Node {
 
     public Coordinator(int id, Set<CrashPhase> crashPhases) {
         super(id, crashPhases);
-        System.out.println("AAAAAAAAAAAAAAAAAAAAAA" + (CrashBefore2PC.BEFORE_TXN_ACCEPT_MSG.equals(CrashDuring2PC.CrashDuringVote.ZERO_MSG) ? "UGUALIII!!!" : "DIVERSE!!!"));
     }
 
     static public Props props(int id,  Set<CrashPhase> crashPhases) {
@@ -75,6 +74,7 @@ public class Coordinator extends Node {
                 .match(ClientCoordinatorMessage.ReadMsg.class, this::onReadMsg)
                 .match(CoordinatorServerMessage.TxnReadResponseMsg.class, this::onTxnReadResponseMsg)
                 .match(ClientCoordinatorMessage.WriteMsg.class, this::onWriteMsg)
+                .match(Message.CheckCorrectness.class, this::onCheckCorrectness)
                 .build();
     }
 
@@ -245,4 +245,10 @@ public class Coordinator extends Node {
         if (!trackServerForTxn(transaction, serverId))
            servers.get(serverId).tell(new CoordinatorServerMessage.TransactionWrite(transaction, key, value), getSelf());
     }
+
+    @Override
+    public void onCheckCorrectness(Message.CheckCorrectness msg){
+        getSender().tell(new Message.CheckCorrectnessResponse(id, null, numCrashes), getSelf());
+    }
+
 }

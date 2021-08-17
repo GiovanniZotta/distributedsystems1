@@ -3,16 +3,14 @@ package it.unitn.ds1;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 
-import it.unitn.ds1.actors.Checker;
-import it.unitn.ds1.actors.Client;
-import it.unitn.ds1.actors.Coordinator;
-import it.unitn.ds1.actors.Server;
+import it.unitn.ds1.actors.*;
 import it.unitn.ds1.messages.Message;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class Main {
     public final static int N_CLIENTS = 5;
@@ -30,7 +28,7 @@ public class Main {
     public final static Boolean SERVER_DEBUG_DECIDED = false;
     public final static Boolean COORD_DEBUG_DECISION = false;
     public final static Boolean NODE_DEBUG_STARTING_SIZE = false;
-    public final static Boolean NODE_DEBUG_CRASH = false;
+    public final static Boolean NODE_DEBUG_CRASH = true;
     public final static Boolean DEBUG_MULT_CRASH_ZERO = false;
     public final static Boolean DEBUG_MULT_CRASH_RANDOM = false;
     public final static Boolean DEBUG_MULT_CRASH_ALL = false;
@@ -56,8 +54,11 @@ public class Main {
 
         // Create the coordinators
         List<ActorRef> coordinators = new ArrayList<>();
+        Set<Node.CrashPhase> coordinatorCrashPhases = new HashSet<>();
+        coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.BEFORE_TXN_ACCEPT_MSG);
+        coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.ON_CLIENT_MSG);
         for (int i = 0; i < N_COORDINATORS; i++)
-            coordinators.add(system.actorOf(Coordinator.props(i, new HashSet<>()), "coordinator" + i));
+            coordinators.add(system.actorOf(Coordinator.props(i, coordinatorCrashPhases), "coordinator" + i));
         System.out.println("Coordinators created");
 
         // Create the servers
@@ -103,6 +104,12 @@ public class Main {
         }
 
         checker.tell(new Message.CheckCorrectness(), null);
+
+        try {
+            Thread.sleep(5000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
         system.terminate();
     }
 }

@@ -235,6 +235,7 @@ public class Server extends Node {
 //        getSender().tell(new CoordinatorServerMessages.TransactionReadResponse(valueRead), getSelf());
     }
 
+    @Override
     public void onCheckCorrectness(Message.CheckCorrectness msg){
         Integer result = 0;
         for (Integer key: database.keySet()) {

@@ -44,7 +44,7 @@ public class Message {
         public CheckCorrectnessResponse(Integer id, Integer sumOfKeys, Node.CrashPhaseMap numCrashes) {
             this.id = id;
             this.sumOfKeys = sumOfKeys;
-            this.numCrashes = numCrashes;
+            this.numCrashes = new Node.CrashPhaseMap(numCrashes);
         }
     }
 

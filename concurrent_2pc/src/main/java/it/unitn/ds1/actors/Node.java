@@ -17,13 +17,22 @@ import java.util.concurrent.TimeUnit;
 public abstract class Node extends AbstractActor {
     public interface CrashPhase {}
     public static class CrashPhaseMap extends HashMap<CrashPhase, Integer> {
+
+        public CrashPhaseMap() {
+            super();
+        }
+
+        public CrashPhaseMap(CrashPhaseMap numCrashes) {
+            super(numCrashes);
+        }
+
         @Override
         public String toString() {
             String res = "";
             for (Entry<CrashPhase, Integer> entry : this.entrySet()){
                 res += entry.getKey().toString() + ": " + entry.getValue() + "\n";
             }
-            return res.substring(0, res.length() - 1);
+            return res;
         }
 
         public static CrashPhaseMap sumMaps(Collection<CrashPhaseMap> maps) {
@@ -141,6 +150,7 @@ public abstract class Node extends AbstractActor {
         return receiveBuilder()
                 .match(CoordinatorServerMessage.Recovery.class, this::onRecovery)
                 .match(Message.CheckerMsg.class, this::onCheckerMsg)
+                .match(Message.CheckCorrectness.class, this::onCheckCorrectness)
                 .matchAny(msg -> {
                 })
                 .build();
@@ -157,4 +167,6 @@ public abstract class Node extends AbstractActor {
 
         // just ignoring if we don't know the decision
     }
+
+    public abstract void onCheckCorrectness(Message.CheckCorrectness msg);
 }
