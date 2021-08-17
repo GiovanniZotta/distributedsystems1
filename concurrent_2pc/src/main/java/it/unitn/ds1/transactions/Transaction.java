@@ -11,6 +11,14 @@ public class Transaction implements Cloneable {
         this.txnId = new AbstractMap.SimpleEntry<>(clientId, numAttemptedTxn);
     }
 
+    public Integer getClientId() {
+        return txnId.getKey();
+    }
+
+    public Integer getNumAttemptedTxn() {
+        return txnId.getValue();
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

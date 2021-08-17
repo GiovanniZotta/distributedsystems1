@@ -22,23 +22,34 @@ COORDINATOR: After the coordinator recovers, it aborts all the pending transacti
 CLIENT: After a timeout, the client aborts by doing nothing.
 SERVER: **abort after a timeout**
 
-#### The coordinator crashes during a 2-PC
+#### The coordinator crashes during a 2-PC (after receiving TXN_END)
 
-* before sending a vote:
-  * COORDINATOR: once it recovers, decides abort
+* before the server has received a vote request:
   * SERVER: after a timeout, abort
-* after sending YES vote, while waiting for the global decision:
+  * COORDINATOR: once it recovers, decides abort
+* after the server has sent a YES vote, while waiting for the global decision:
   * COORDINATOR:
     * if it is in READY state, abort after a timeout if it does not receive all the votes (even if it has crashed and recovered)
-    * if it is in COMMIT/ABORT tell the decision to the remaining cohorts.
+    * if it is in COMMIT/ABORT on recovery tell the decision to the remaining cohorts.
   * SERVER: ask everybody else for the decision:
     * if it finds a COMMIT, commits;
     * if it finds an ABORT, aborts;
-    * otherwise wait.
+    * otherwise wait. (periodically ask?)
+* the client times out and starts a new transaction with another (or the same) coordinator
+
+### SERVER CRASH
 
 #### A server crashes during a TXN
+* COORDINATOR: on timeout, decide to abort
+* SERVER: on recovery abort all pending transactions apart from the ones for which it voted COMMIT.
 
 #### A server crashes during a 2-PC
+* before the server sent a vote:
+  * COORDINATOR: abort after a timeout
+  * SERVER: on recovery abort all pending transactions apart from the ones for which it voted COMMIT.
+* after the server sent a COMMIT vote
+  * COORDINATOR: business as usual
+  * SERVER: on recovery ask the decision to the coordinator 
 
 ## Considerations
 
@@ -57,3 +68,6 @@ SERVER: **abort after a timeout**
   * VERSION is the first version read/written
   * VALUE is the last value read/written
   * CHANGED is a boolean
+
+### Reliable network
+We assume that our timeout are much larger than the network propagation speed.

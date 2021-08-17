@@ -7,11 +7,11 @@ import it.unitn.ds1.actors.Checker;
 import it.unitn.ds1.actors.Client;
 import it.unitn.ds1.actors.Coordinator;
 import it.unitn.ds1.actors.Server;
-import it.unitn.ds1.messages.CoordinatorServerMessages.Vote;
 import it.unitn.ds1.messages.Message;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 
 public class Main {
@@ -35,9 +35,12 @@ public class Main {
     public final static Boolean DEBUG_MULT_CRASH_RANDOM = false;
     public final static Boolean DEBUG_MULT_CRASH_ALL = false;
 
+    /*-- Timeout debug ---------------------------------------------------------*/
+    public static final Boolean CLIENT_DEBUG_TIMEOUT_TXN_OPERATION = false;
+    public static final Boolean CLIENT_DEBUG_TIMEOUT_TXN_ACCEPT = false;
 
-    public final static int VOTE_TIMEOUT = 1000;      // timeout for the votes, ms
-    public final static int DECISION_TIMEOUT = 2000;  // timeout for the decision, ms
+    public final static int MAX_RECOVERY_TIME = 5000;      // timeout for the votes, ms
+    public final static int TIMEOUT = 500;  // timeout for the decision, ms
 
     /*-- Main ------------------------------------------------------------------*/
     public static void main(String[] args) {
@@ -54,17 +57,17 @@ public class Main {
         // Create the coordinators
         List<ActorRef> coordinators = new ArrayList<>();
         for (int i = 0; i < N_COORDINATORS; i++)
-            coordinators.add(system.actorOf(Coordinator.props(i), "coordinator" + i));
+            coordinators.add(system.actorOf(Coordinator.props(i, new HashSet<>()), "coordinator" + i));
         System.out.println("Coordinators created");
 
         // Create the servers
         List<ActorRef> servers = new ArrayList<>();
         for (int i = 0; i < N_SERVER; i++)
-            servers.add(system.actorOf(Server.props(i), "server" + i));
+            servers.add(system.actorOf(Server.props(i, new HashSet<>()), "server" + i));
         System.out.println("Servers created");
 
         // Create the checker
-        ActorRef checker = system.actorOf(Checker.props(N_SERVER), "checker");
+        ActorRef checker = system.actorOf(Checker.props(N_SERVER, new HashSet<>()), "checker");
 
 
         // Send start messages to the clients

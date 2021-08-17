@@ -6,16 +6,22 @@ import akka.actor.ActorRef;
 import akka.actor.Props;
 import it.unitn.ds1.Main;
 import it.unitn.ds1.transactions.CoordinatorTransaction;
-import it.unitn.ds1.transactions.ServerTransaction;
 import it.unitn.ds1.transactions.Transaction;
-import it.unitn.ds1.messages.ClientCoordinatorMessages;
-import it.unitn.ds1.messages.CoordinatorServerMessages;
+import it.unitn.ds1.messages.ClientCoordinatorMessage;
+import it.unitn.ds1.messages.CoordinatorServerMessage;
 import it.unitn.ds1.messages.Message;
 
 import java.io.Serializable;
 import java.util.*;
 
 public class Coordinator extends Node {
+
+
+    public enum CrashBefore2PC implements CrashPhase {BEFORE_TXN_ACCEPT_MSG, ON_CLIENT_MSG, ON_SERVER_MSG}
+    public static class CrashDuring2PC {
+        public enum CrashDuringVote {ZERO_MSG, RND_MSG, ALL_MSG}
+        public enum CrashDuringDecision {ZERO_MSG, RND_MSG, ALL_MSG}
+    }
 
     // here all the nodes that sent YES are collected
     private final Map<ActorRef, CoordinatorTransaction> client2transaction = new HashMap<>();
@@ -29,59 +35,59 @@ public class Coordinator extends Node {
         return transaction.getYesVoters().size() == transaction.getServers().size();
     }
 
-    public Coordinator(int id) {
-        super(id);
+    public Coordinator(int id, Set<CrashPhase> crashPhases) {
+        super(id, crashPhases);
     }
 
-    static public Props props(int id) {
-        return Props.create(Coordinator.class, () -> new Coordinator(id));
+    static public Props props(int id,  Set<CrashPhase> crashPhases) {
+        return Props.create(Coordinator.class, () -> new Coordinator(id, crashPhases));
     }
 
     @Override
     public Receive createReceive() {
         return receiveBuilder()
-                .match(CoordinatorServerMessages.Recovery.class, this::onRecovery)
+                .match(CoordinatorServerMessage.Recovery.class, this::onRecovery)
                 .match(Message.WelcomeMsg.class, this::onWelcomeMsg)
-                .match(CoordinatorServerMessages.VoteResponse.class, this::onVoteResponse)
-                .match(CoordinatorServerMessages.Timeout.class, this::onTimeout)
-                .match(CoordinatorServerMessages.DecisionRequest.class, this::onDecisionRequest)
-                .match(ClientCoordinatorMessages.TxnBeginMsg.class, this::onTxnBeginMsg)
-                .match(ClientCoordinatorMessages.TxnEndMsg.class, this::onTxnEndMsg)
-                .match(ClientCoordinatorMessages.ReadMsg.class, this::onReadMsg)
-                .match(CoordinatorServerMessages.TxnReadResponseMsg.class, this::onTxnReadResponseMsg)
-                .match(ClientCoordinatorMessages.WriteMsg.class, this::onWriteMsg)
+                .match(CoordinatorServerMessage.VoteResponse.class, this::onVoteResponse)
+                .match(CoordinatorServerMessage.Timeout.class, this::onTimeout)
+                .match(CoordinatorServerMessage.DecisionRequest.class, this::onDecisionRequest)
+                .match(ClientCoordinatorMessage.TxnBeginMsg.class, this::onTxnBeginMsg)
+                .match(ClientCoordinatorMessage.TxnEndMsg.class, this::onTxnEndMsg)
+                .match(ClientCoordinatorMessage.ReadMsg.class, this::onReadMsg)
+                .match(CoordinatorServerMessage.TxnReadResponseMsg.class, this::onTxnReadResponseMsg)
+                .match(ClientCoordinatorMessage.WriteMsg.class, this::onWriteMsg)
                 .build();
     }
 
-    void multicastAndCrash(Serializable m, int recoverIn, CrashPhase phase){
-        Integer crashAfter = 0;
-        switch(phase){
-            case ZERO_MESSAGES:
-                if(Main.DEBUG_MULT_CRASH_ZERO){
-                    print("CRASH AFTER ZERO MESSAGES");
-                }
-                crash(recoverIn);
-                return;
-            case RANDOM_MESSAGES:
-                crashAfter = r.nextInt(Main.N_SERVER - 1);
-                if(Main.DEBUG_MULT_CRASH_RANDOM)
-                    print("CRASH AFTER " + crashAfter + " MESSAGES");
-                break;
-            case ALL_MESSAGES:
-                crashAfter = Main.N_SERVER - 1;
-                if(Main.DEBUG_MULT_CRASH_ALL)
-                    print("CRASH AFTER ALL MESSAGES");
-                break;
-        }
-        Integer i = 0;
-        for (ActorRef p : servers) {
-            p.tell(m, getSelf());
-            if(i == crashAfter){
-                crash(recoverIn);
-                return;
-            }
-            i++;
-        }
+    void multicastAndCrash(Serializable m, int recoverIn){
+//        Integer crashAfter = 0;
+//        switch(phase){
+//            case ZERO_MESSAGES:
+//                if(Main.DEBUG_MULT_CRASH_ZERO){
+//                    print("CRASH AFTER ZERO MESSAGES");
+//                }
+//                crash(recoverIn);
+//                return;
+//            case RANDOM_MESSAGES:
+//                crashAfter = r.nextInt(Main.N_SERVER - 1);
+//                if(Main.DEBUG_MULT_CRASH_RANDOM)
+//                    print("CRASH AFTER " + crashAfter + " MESSAGES");
+//                break;
+//            case ALL_MESSAGES:
+//                crashAfter = Main.N_SERVER - 1;
+//                if(Main.DEBUG_MULT_CRASH_ALL)
+//                    print("CRASH AFTER ALL MESSAGES");
+//                break;
+//        }
+//        Integer i = 0;
+//        for (ActorRef p : servers) {
+//            p.tell(m, getSelf());
+//            if(i == crashAfter){
+//                crash(recoverIn);
+//                return;
+//            }
+//            i++;
+//        }
     }
 
     public void onWelcomeMsg(Message.WelcomeMsg msg) {                   /* Start */
@@ -94,44 +100,53 @@ public class Coordinator extends Node {
 
     // fix the final decision of the current node
     @Override
-    void fixDecision(Transaction transaction, CoordinatorServerMessages.Decision d) {
+    void fixDecision(Transaction transaction, CoordinatorServerMessage.Decision d) {
         if (!hasDecided(transaction)) {
             transaction2decision.put(transaction, d);
-            transaction2client.get(transaction).tell(new ClientCoordinatorMessages.TxnResultMsg(d == CoordinatorServerMessages.Decision.COMMIT), getSelf());
+            ActorRef client = transaction2client.get(transaction);
+            assert(client != null);
+            client.tell(
+                    new ClientCoordinatorMessage.TxnResultMsg(
+                            d == CoordinatorServerMessage.Decision.COMMIT,
+                            transaction.getNumAttemptedTxn()), getSelf()
+            );
             pendingTransactions.remove(transaction);
+            client2transaction.remove(client);
+            transaction2client.remove(transaction);
+            // TODO: remove client from map
             if(Main.COORD_DEBUG_DECISION)
                 print("Coordinator " + this.id + " decided " + d
                 + " on transaction " + transaction.getTxnId());
         }
     }
 
-    private CoordinatorTransaction getSTfromTransaction(Transaction transaction){
+    private CoordinatorTransaction getCTfromTransaction(Transaction transaction){
         ActorRef c = transaction2client.get(transaction);
         return client2transaction.get(c);
     }
 
-    public void onVoteResponse(CoordinatorServerMessages.VoteResponse msg) {                    /* Vote */
-        CoordinatorTransaction transaction = getSTfromTransaction(msg.transaction);
-        if (hasDecided(transaction)) {
+    public void onVoteResponse(CoordinatorServerMessage.VoteResponse msg) {                    /* Vote */
+        if (hasDecided(msg.transaction)) {
             // we have already decided and sent the decision to the group,
             // so do not care about other votes
             return;
         }
-        CoordinatorServerMessages.Vote v = (msg).vote;
-        if (v == CoordinatorServerMessages.Vote.YES) {
+        CoordinatorTransaction transaction = getCTfromTransaction(msg.transaction);
+        CoordinatorServerMessage.Vote v = (msg).vote;
+        if (v == CoordinatorServerMessage.Vote.YES) {
             transaction.getYesVoters().add(getSender());
             if (allVotedYes(transaction)) {
-                takeDecision(transaction, CoordinatorServerMessages.Decision.COMMIT);
+                takeDecision(transaction, CoordinatorServerMessage.Decision.COMMIT);
                 //if (id==-1) {crash(3000); return;}
 //                multicastAndCrash(new CoordinatorServerMessages.DecisionResponse(transaction2decision.get(transaction)), 3000);
             }
         } else { // a NO vote
             // on a single NO we decide ABORT
-            takeDecision(transaction, CoordinatorServerMessages.Decision.ABORT);
+            takeDecision(transaction, CoordinatorServerMessage.Decision.ABORT);
         }
     }
 
-    public void onTimeout(CoordinatorServerMessages.Timeout msg) {
+    public void onTimeout(CoordinatorServerMessage.Timeout msg) {
 //        if (!hasDecided(tra)) {
 //            print("Timeout");
 //
@@ -140,35 +155,42 @@ public class Coordinator extends Node {
 //        }
     }
 
+
     @Override
-    public void onRecovery(CoordinatorServerMessages.Recovery msg) {
+    public void onRecovery(CoordinatorServerMessage.Recovery msg) {
         getContext().become(createReceive());
 
-        // TODO 2: coordinator recovery action
+        for (Transaction t : new HashSet<>(pendingTransactions)) {
+            takeDecision(t, CoordinatorServerMessage.Decision.ABORT);
+        }
+
+
     }
 
-    public void onTxnBeginMsg(ClientCoordinatorMessages.TxnBeginMsg msg) {
+    public void onTxnBeginMsg(ClientCoordinatorMessage.TxnBeginMsg msg) {
         // initialize transaction
+        // TODO: check if the client is already in the map
         CoordinatorTransaction t = new CoordinatorTransaction(msg.clientId, msg.numAttemptedTxn, getSender());
         client2transaction.put(getSender(), t);
         transaction2client.put(t, getSender());
         pendingTransactions.add(t);
         // send accept
-        getSender().tell(new ClientCoordinatorMessages.TxnAcceptMsg(), getSelf());
+        if (!crashPhases.contains(CrashBefore2PC.BEFORE_TXN_ACCEPT_MSG) || !maybeCrash())
+            getSender().tell(new ClientCoordinatorMessage.TxnAcceptMsg(), getSelf());
     }
 
-    private void takeDecision(Transaction transaction, CoordinatorServerMessages.Decision decision){
-        CoordinatorTransaction transaction1 = getSTfromTransaction(transaction);
+    private void takeDecision(Transaction transaction, CoordinatorServerMessage.Decision decision){
+        CoordinatorTransaction transaction1 = getCTfromTransaction(transaction);
         fixDecision(transaction1, decision);
-        multicast(new CoordinatorServerMessages.DecisionResponse(transaction1, transaction2decision.get(transaction1)), transaction1.getServers());
+        multicast(new CoordinatorServerMessage.DecisionResponse(transaction1, transaction2decision.get(transaction1)), transaction1.getServers());
     }
 
-    public void onTxnEndMsg(ClientCoordinatorMessages.TxnEndMsg msg) {
+    public void onTxnEndMsg(ClientCoordinatorMessage.TxnEndMsg msg) {
         CoordinatorTransaction transaction = client2transaction.get(getSender());
         if(msg.commit){
-            multicast(new CoordinatorServerMessages.VoteRequest(transaction), transaction.getServers());
+            multicast(new CoordinatorServerMessage.VoteRequest(transaction), transaction.getServers());
         } else {
-            takeDecision(transaction, CoordinatorServerMessages.Decision.ABORT);
+            takeDecision(transaction, CoordinatorServerMessage.Decision.ABORT);
         }
 //        print("Sending vote requests");
 //        multicast(new CoordinatorServerMessages.VoteRequest());
@@ -177,29 +199,33 @@ public class Coordinator extends Node {
 //      crash(5000);
     }
 
-    private void trackServerForTxn(CoordinatorTransaction transaction, Integer serverId){
+    private Boolean trackServerForTxn(CoordinatorTransaction transaction, Integer serverId) {
         transaction.getServers().add(servers.get(serverId));
+        if (crashPhases.contains(CrashBefore2PC.ON_CLIENT_MSG))
+            return maybeCrash();
+        return false;
     }
 
-    public void onReadMsg (ClientCoordinatorMessages.ReadMsg msg) {
+    public void onReadMsg (ClientCoordinatorMessage.ReadMsg msg) {
         int key = msg.key;
         int serverId = key / Server.DB_SIZE;
         CoordinatorTransaction transaction = client2transaction.get(getSender());
-        trackServerForTxn(transaction, serverId);
-        servers.get(serverId).tell(new CoordinatorServerMessages.TransactionRead(transaction, key), getSelf());
+        if (!trackServerForTxn(transaction, serverId))
+            servers.get(serverId).tell(new CoordinatorServerMessage.TransactionRead(transaction, key), getSelf());
     }
 
-    public void onTxnReadResponseMsg(CoordinatorServerMessages.TxnReadResponseMsg msg) {
+    public void onTxnReadResponseMsg(CoordinatorServerMessage.TxnReadResponseMsg msg) {
         ActorRef c = transaction2client.get(msg.transaction);
-        c.tell(new ClientCoordinatorMessages.ReadResultMsg(msg.key, msg.valueRead), getSelf());
+        if (!crashPhases.contains(CrashBefore2PC.ON_SERVER_MSG) || !maybeCrash())
+            c.tell(new ClientCoordinatorMessage.ReadResultMsg(msg.key, msg.valueRead), getSelf());
     }
 
-    public void onWriteMsg (ClientCoordinatorMessages.WriteMsg msg) {
+    public void onWriteMsg (ClientCoordinatorMessage.WriteMsg msg) {
         int key = msg.key;
         int value = msg.value;
         int serverId = key / Server.DB_SIZE;
         CoordinatorTransaction transaction = client2transaction.get(getSender());
-        trackServerForTxn(transaction, serverId);
-        servers.get(serverId).tell(new CoordinatorServerMessages.TransactionWrite(transaction, key, value), getSelf());
+        if (!trackServerForTxn(transaction, serverId))
+           servers.get(serverId).tell(new CoordinatorServerMessage.TransactionWrite(transaction, key, value), getSelf());
     }
 }

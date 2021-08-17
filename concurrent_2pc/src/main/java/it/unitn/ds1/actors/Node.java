@@ -6,7 +6,7 @@ import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import it.unitn.ds1.Main;
 import it.unitn.ds1.transactions.Transaction;
-import it.unitn.ds1.messages.CoordinatorServerMessages;
+import it.unitn.ds1.messages.CoordinatorServerMessage;
 import it.unitn.ds1.messages.Message;
 import scala.concurrent.duration.Duration;
 
@@ -15,23 +15,25 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public abstract class Node extends AbstractActor {
-
-    public enum CrashPhase {ZERO_MESSAGES, RANDOM_MESSAGES, ALL_MESSAGES}
+    public static interface CrashPhase {}
+    protected static final double CRASH_PROBABILITY = 0;
     protected int id;                           // node ID
     protected List<ActorRef> servers;      // list of participant nodes
     protected ActorRef checker;
-    protected final Map<Transaction, CoordinatorServerMessages.Decision> transaction2decision;
+    protected final Map<Transaction, CoordinatorServerMessage.Decision> transaction2decision;
     protected final Random r;
+    protected final Set<CrashPhase> crashPhases;
 
-    public Node(int id) {
+    public Node(int id, Set<CrashPhase> crashPhases) {
         super();
         this.id = id;
+        this.crashPhases = crashPhases;
         transaction2decision = new HashMap<>();
         r = new Random();
     }
 
     // abstract method to be implemented in extending classes
-    protected abstract void onRecovery(CoordinatorServerMessages.Recovery msg);
+    protected abstract void onRecovery(CoordinatorServerMessage.Recovery msg);
 
     void setGroup(Message.WelcomeMsg sm) {
         servers = new ArrayList<>();
@@ -56,9 +58,17 @@ public abstract class Node extends AbstractActor {
         getContext().system().scheduler().scheduleOnce(
                 Duration.create(recoverIn, TimeUnit.MILLISECONDS),
                 getSelf(),
-                new CoordinatorServerMessages.Recovery(), // message sent to myself
+                new CoordinatorServerMessage.Recovery(), // message sent to myself
                 getContext().system().dispatcher(), getSelf()
         );
+    }
+
+    Boolean maybeCrash() {
+        if (false && r.nextDouble() < CRASH_PROBABILITY) {
+            crash(1 + r.nextInt(Main.MAX_RECOVERY_TIME));
+            return true;
+        }
+        return false;
     }
 
     // emulate a delay of d milliseconds
@@ -75,19 +85,19 @@ public abstract class Node extends AbstractActor {
     }
 
     // a multicast implementation that crashes after sending the first message
-    abstract void multicastAndCrash(Serializable m, int recoverIn, CrashPhase phase);
+    abstract void multicastAndCrash(Serializable m, int recoverIn);
 
     // schedule a Timeout message in specified time
     void setTimeout(int time) {
         getContext().system().scheduler().scheduleOnce(
                 Duration.create(time, TimeUnit.MILLISECONDS),
                 getSelf(),
-                new CoordinatorServerMessages.Timeout(), // the message to send
+                new CoordinatorServerMessage.Timeout(), // the message to send
                 getContext().system().dispatcher(), getSelf()
         );
     }
 
-    abstract void fixDecision(Transaction transaction, CoordinatorServerMessages.Decision d);
+    abstract void fixDecision(Transaction transaction, CoordinatorServerMessage.Decision d);
 
     boolean hasDecided(Transaction transaction) {
         return transaction2decision.get(transaction) != null;
@@ -107,7 +117,7 @@ public abstract class Node extends AbstractActor {
 
     public Receive crashed() {
         return receiveBuilder()
-                .match(CoordinatorServerMessages.Recovery.class, this::onRecovery)
+                .match(CoordinatorServerMessage.Recovery.class, this::onRecovery)
                 .match(Message.CheckerMsg.class, this::onCheckerMsg)
                 .matchAny(msg -> {
                 })
@@ -118,10 +128,10 @@ public abstract class Node extends AbstractActor {
         this.checker = msg.checker;
     }
 
-    public void onDecisionRequest(CoordinatorServerMessages.DecisionRequest msg) {  /* Decision Request */
+    public void onDecisionRequest(CoordinatorServerMessage.DecisionRequest msg) {  /* Decision Request */
         Transaction transaction = msg.transaction;
         if (hasDecided(transaction))
-            getSender().tell(new CoordinatorServerMessages.DecisionResponse(transaction, transaction2decision.get(transaction)), getSelf());
+            getSender().tell(new CoordinatorServerMessage.DecisionResponse(transaction, transaction2decision.get(transaction)), getSelf());
 
         // just ignoring if we don't know the decision
     }

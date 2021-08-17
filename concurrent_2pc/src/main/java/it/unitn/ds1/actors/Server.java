@@ -6,7 +6,7 @@ import it.unitn.ds1.resources.Resource;
 import it.unitn.ds1.resources.WorkspaceResource;
 import it.unitn.ds1.transactions.ServerTransaction;
 import it.unitn.ds1.transactions.Transaction;
-import it.unitn.ds1.messages.CoordinatorServerMessages;
+import it.unitn.ds1.messages.CoordinatorServerMessage;
 import it.unitn.ds1.messages.Message;
 import it.unitn.ds1.transactions.Workspace;
 
@@ -16,34 +16,42 @@ import java.util.*;
 
 /*-- Participant -----------------------------------------------------------*/
 public class Server extends Node {
+
+
+    public enum CrashBefore2PC {ON_COORD_MSG}
+    public static class CrashDuring2PC {
+        public enum CrashDuringVote {NO_VOTE, AFTER_VOTE}
+        public enum CrashDuringTermination {NO_REPLY, RND_REPLY, ALL_REPLY}
+    }
+
     public static final Integer DEFAULT_VALUE = 100;
     public static final Integer DB_SIZE = 10;
     private final Map<Integer, Resource> database;
     private final Map<Transaction, ServerTransaction> transactionMap = new HashMap<>();
     private final Map<Integer, Transaction> pendingResource = new HashMap<>();
 
-    public Server(int id) {
-        super(id);
+    public Server(int id,  Set<Node.CrashPhase> crashPhases) {
+        super(id, crashPhases);
         database = new HashMap<>();
         for (int i = id * DB_SIZE; i < (id + 1) * DB_SIZE; i++)
             database.put(i, new Resource(DEFAULT_VALUE, 0));
     }
 
-    static public Props props(int id) {
-        return Props.create(Server.class, () -> new Server(id));
+    static public Props props(int id,  Set<CrashPhase> crashPhases) {
+        return Props.create(Server.class, () -> new Server(id, crashPhases));
     }
 
     @Override
     public Receive createReceive() {
         return receiveBuilder()
                 .match(Message.WelcomeMsg.class, this::onWelcomeMsg)
-                .match(CoordinatorServerMessages.VoteRequest.class, this::onVoteRequest)
-                .match(CoordinatorServerMessages.DecisionRequest.class, this::onDecisionRequest)
-                .match(CoordinatorServerMessages.DecisionResponse.class, this::onDecisionResponse)
-                .match(CoordinatorServerMessages.Timeout.class, this::onTimeout)
-                .match(CoordinatorServerMessages.Recovery.class, this::onRecovery)
-                .match(CoordinatorServerMessages.TransactionRead.class, this::onTransactionRead)
-                .match(CoordinatorServerMessages.TransactionWrite.class, this::onTransactionWrite)
+                .match(CoordinatorServerMessage.VoteRequest.class, this::onVoteRequest)
+                .match(CoordinatorServerMessage.DecisionRequest.class, this::onDecisionRequest)
+                .match(CoordinatorServerMessage.DecisionResponse.class, this::onDecisionResponse)
+                .match(CoordinatorServerMessage.Timeout.class, this::onTimeout)
+                .match(CoordinatorServerMessage.Recovery.class, this::onRecovery)
+                .match(CoordinatorServerMessage.TransactionRead.class, this::onTransactionRead)
+                .match(CoordinatorServerMessage.TransactionWrite.class, this::onTransactionWrite)
                 .match(Message.CheckCorrectness.class, this::onCheckCorrectness)
                 .build();
     }
@@ -90,25 +98,25 @@ public class Server extends Node {
         }
     }
 
-    public void onVoteRequest(CoordinatorServerMessages.VoteRequest msg) {
+    public void onVoteRequest(CoordinatorServerMessage.VoteRequest msg) {
         Transaction transaction = msg.transaction;
-        CoordinatorServerMessages.Vote vote = null;
+        CoordinatorServerMessage.Vote vote = null;
         //if (id==2) {crash(5000); return;}    // simulate a crash
         //if (id==2) delay(4000);              // simulate a delay
         if(!canCommit(transaction)){
-            fixDecision(transaction, CoordinatorServerMessages.Decision.ABORT);
-            vote = CoordinatorServerMessages.Vote.NO;
+            fixDecision(transaction, CoordinatorServerMessage.Decision.ABORT);
+            vote = CoordinatorServerMessage.Vote.NO;
         } else {
             lockResources(transaction);
-            vote = CoordinatorServerMessages.Vote.YES;
+            vote = CoordinatorServerMessage.Vote.YES;
         }
         if(Main.SERVER_DEBUG_SEND_VOTE)
             print("Server " + id + " sending vote " + vote);
-        getSender().tell(new CoordinatorServerMessages.VoteResponse(transaction, vote), getSelf());
+        getSender().tell(new CoordinatorServerMessage.VoteResponse(transaction, vote), getSelf());
 //        setTimeout(Main.DECISION_TIMEOUT);
     }
 
-    public void onTimeout(CoordinatorServerMessages.Timeout msg) {
+    public void onTimeout(CoordinatorServerMessage.Timeout msg) {
 //        if (!hasDecided()) {
 //            print("Timeout. Asking around.");
 //
@@ -118,7 +126,7 @@ public class Server extends Node {
     }
 
     @Override
-    public void onRecovery(CoordinatorServerMessages.Recovery msg) {
+    public void onRecovery(CoordinatorServerMessage.Recovery msg) {
 //        getContext().become(createReceive());
 //
 //        // We don't handle explicitly the "not voted" case here
@@ -131,7 +139,7 @@ public class Server extends Node {
     }
 
     @Override
-    void multicastAndCrash(Serializable m, int recoverIn, CrashPhase phase) {
+    void multicastAndCrash(Serializable m, int recoverIn) {
 
     }
 
@@ -153,12 +161,12 @@ public class Server extends Node {
     }
 
     @Override
-    void fixDecision(Transaction transaction, CoordinatorServerMessages.Decision d) {
+    void fixDecision(Transaction transaction, CoordinatorServerMessage.Decision d) {
         if (!hasDecided(transaction)) {
             transaction2decision.put(transaction, d);
             if(Main.SERVER_DEBUG_DECIDED)
                 print(" Server decided " + d);
-            if(d == CoordinatorServerMessages.Decision.COMMIT){
+            if(d == CoordinatorServerMessage.Decision.COMMIT){
                 commitWorkspace(transaction);
             }
             freeWorkspace(transaction);
@@ -166,17 +174,17 @@ public class Server extends Node {
 
     }
 
-    public void onDecisionResponse(CoordinatorServerMessages.DecisionResponse msg) { /* Decision Response */
+    public void onDecisionResponse(CoordinatorServerMessage.DecisionResponse msg) { /* Decision Response */
         Transaction transaction = msg.transaction;
         // store the decision
         fixDecision(transaction, msg.decision);
     }
 
-    private WorkspaceResource processWorkspace(CoordinatorServerMessages.TransactionAction msg) {
+    private WorkspaceResource processWorkspace(CoordinatorServerMessage.TransactionAction msg) {
         // create workspace if the transaction is new
         if(!transactionMap.containsKey(msg.transaction)){
-            Integer clientId = msg.transaction.getTxnId().getKey();
-            Integer clientAttemptedTxn = msg.transaction.getTxnId().getValue();
+            Integer clientId = msg.transaction.getClientId();
+            Integer clientAttemptedTxn = msg.transaction.getNumAttemptedTxn();
             ServerTransaction transaction = new ServerTransaction(clientId, clientAttemptedTxn, getSender());
             transactionMap.put(msg.transaction, transaction);
         }
@@ -190,14 +198,14 @@ public class Server extends Node {
         return transaction.getWorkspace().get(msg.key);
     }
 
-    public void onTransactionRead(CoordinatorServerMessages.TransactionRead msg) {
+    public void onTransactionRead(CoordinatorServerMessage.TransactionRead msg) {
         int valueRead = processWorkspace(msg).getValue();
-        getSender().tell(new CoordinatorServerMessages.TxnReadResponseMsg(msg.transaction, msg.key, valueRead),
+        getSender().tell(new CoordinatorServerMessage.TxnReadResponseMsg(msg.transaction, msg.key, valueRead),
                 getSelf());
     }
 
 
-    public void onTransactionWrite(CoordinatorServerMessages.TransactionWrite msg) {
+    public void onTransactionWrite(CoordinatorServerMessage.TransactionWrite msg) {
         WorkspaceResource resource = processWorkspace(msg);
         resource.setValue(msg.value);
         resource.setChanged(true);

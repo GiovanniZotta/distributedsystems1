@@ -3,10 +3,12 @@ package it.unitn.ds1.actors;
 import akka.actor.ActorRef;
 import akka.actor.Props;
 import it.unitn.ds1.transactions.Transaction;
-import it.unitn.ds1.messages.CoordinatorServerMessages;
+import it.unitn.ds1.messages.CoordinatorServerMessage;
 import it.unitn.ds1.messages.Message;
 
 import java.io.Serializable;
+import java.util.HashMap;
+import java.util.Set;
 
 
 /*-- Participant -----------------------------------------------------------*/
@@ -14,29 +16,29 @@ public class Checker extends Node {
     private Integer numServers;
     private Integer counter;
     private Integer partialSum;
-    public Checker(int numServers){
-        super(-1);
+    public Checker(int numServers, Set<CrashPhase> crashPhases){
+        super(-1, crashPhases);
         this.numServers = numServers;
         this.counter = 0;
         this.partialSum = 0;
     }
 
     @Override
-    protected void onRecovery(CoordinatorServerMessages.Recovery msg) {
+    protected void onRecovery(CoordinatorServerMessage.Recovery msg) {
 
     }
 
     @Override
-    void multicastAndCrash(Serializable m, int recoverIn, CrashPhase phase){
+    void multicastAndCrash(Serializable m, int recoverIn){
 
     }
 
     @Override
-    void fixDecision(Transaction transaction, CoordinatorServerMessages.Decision d) {
+    void fixDecision(Transaction transaction, CoordinatorServerMessage.Decision d) {
 
     }
 
-    static public Props props(int numServers) { return Props.create(Checker.class, () -> new Checker(numServers)); }
+    static public Props props(int numServers, Set<CrashPhase> crashPhases) { return Props.create(Checker.class, () -> new Checker(numServers, crashPhases)); }
 
     @Override
     public Receive createReceive() {

@@ -1,12 +1,14 @@
 package it.unitn.ds1.actors;
 
+import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import akka.actor.*;
 import it.unitn.ds1.Main;
-import it.unitn.ds1.messages.ClientCoordinatorMessages;
+import it.unitn.ds1.messages.ClientCoordinatorMessage;
 import it.unitn.ds1.messages.Message;
+import it.unitn.ds1.messages.TimeoutMessages;
 import scala.concurrent.duration.Duration;
 
 public class Client extends AbstractActor {
@@ -33,7 +35,7 @@ public class Client extends AbstractActor {
     private Integer firstValue, secondValue;
     private Integer numOpTotal;
     private Integer numOpDone;
-    private Cancellable acceptTimeout;
+    private Cancellable acceptTimeout, operationTimeout;
     private final Random r;
 
     /*-- Actor constructor ---------------------------------------------------- */
@@ -43,6 +45,15 @@ public class Client extends AbstractActor {
         this.numAttemptedTxn = 0;
         this.numCommittedTxn = 0;
         this.r = new Random();
+    }
+
+    private Cancellable setTimeout(Serializable msg) {
+        return getContext().system().scheduler().scheduleOnce(
+                Duration.create(Main.TIMEOUT, TimeUnit.MILLISECONDS),
+                getSelf(),
+                msg, // message sent to myself
+                getContext().system().dispatcher(), getSelf()
+        );
     }
 
     static public Props props(int clientId) {
@@ -63,7 +74,7 @@ public class Client extends AbstractActor {
 
         // contact a random coordinator and begin TXN
         currentCoordinator = coordinators.get(r.nextInt(coordinators.size()));
-        currentCoordinator.tell(new ClientCoordinatorMessages.TxnBeginMsg(clientId, numAttemptedTxn), getSelf());
+        currentCoordinator.tell(new ClientCoordinatorMessage.TxnBeginMsg(clientId, numAttemptedTxn), getSelf());
 
         // how many operations (taking some amount and adding it somewhere else)?
         int numExtraOp = RAND_LENGTH_RANGE > 0 ? r.nextInt(RAND_LENGTH_RANGE) : 0;
@@ -71,12 +82,7 @@ public class Client extends AbstractActor {
         numOpDone = 0;
 
         // timeout for confirmation of TXN by the coordinator (sent to self)
-        acceptTimeout = getContext().system().scheduler().scheduleOnce(
-                Duration.create(500, TimeUnit.MILLISECONDS),
-                getSelf(),
-                new ClientCoordinatorMessages.TxnAcceptTimeoutMsg(), // message sent to myself
-                getContext().system().dispatcher(), getSelf()
-        );
+        acceptTimeout = setTimeout(new TimeoutMessages.Client.TxnAcceptMsg());
         if(Main.CLIENT_DEBUG_BEGIN_TXN)
             System.out.println("CLIENT " + clientId + " BEGIN");
     }
@@ -84,7 +90,9 @@ public class Client extends AbstractActor {
     // end the current TXN sending TxnEndMsg to the coordinator
     void endTxn() {
         boolean doCommit = r.nextDouble() < COMMIT_PROBABILITY;
-        currentCoordinator.tell(new ClientCoordinatorMessages.TxnEndMsg(clientId, doCommit), getSelf());
+        currentCoordinator.tell(new ClientCoordinatorMessage.TxnEndMsg(clientId, doCommit), getSelf());
+        operationTimeout = setTimeout(new TimeoutMessages.Client.TxnOperationMsg());
+
         firstValue = null;
         secondValue = null;
         if(Main.CLIENT_DEBUG_END_TXN)
@@ -99,9 +107,10 @@ public class Client extends AbstractActor {
         secondKey = (firstKey + randKeyOffset) % (maxKey + 1);
 
         // READ requests
-        currentCoordinator.tell(new ClientCoordinatorMessages.ReadMsg(clientId, firstKey), getSelf());
-        currentCoordinator.tell(new ClientCoordinatorMessages.ReadMsg(clientId, secondKey), getSelf());
+        currentCoordinator.tell(new ClientCoordinatorMessage.ReadMsg(clientId, firstKey), getSelf());
+        currentCoordinator.tell(new ClientCoordinatorMessage.ReadMsg(clientId, secondKey), getSelf());
 
+        operationTimeout = setTimeout(new TimeoutMessages.Client.TxnOperationMsg());
         // delete the current read values
         firstValue = null;
         secondValue = null;
@@ -115,8 +124,9 @@ public class Client extends AbstractActor {
         // take some amount from one value and pass it to the other, then request writes
         Integer amountTaken = 0;
         if(firstValue >= 1) amountTaken = 1 + r.nextInt(firstValue);
-        currentCoordinator.tell(new ClientCoordinatorMessages.WriteMsg(clientId, firstKey, firstValue - amountTaken), getSelf());
-        currentCoordinator.tell(new ClientCoordinatorMessages.WriteMsg(clientId, secondKey, secondValue + amountTaken), getSelf());
+        currentCoordinator.tell(new ClientCoordinatorMessage.WriteMsg(clientId, firstKey, firstValue - amountTaken), getSelf());
+        currentCoordinator.tell(new ClientCoordinatorMessage.WriteMsg(clientId, secondKey, secondValue + amountTaken), getSelf());
+
         if(Main.CLIENT_DEBUG_WRITE_TXN)
             System.out.println("CLIENT " + clientId + " WRITE #"+ numOpDone
                 + " taken " + amountTaken
@@ -139,17 +149,15 @@ public class Client extends AbstractActor {
         getContext().stop(getSelf());
     }
 
-    private void onTxnAcceptMsg(ClientCoordinatorMessages.TxnAcceptMsg msg) {
+    private void onTxnAcceptMsg(ClientCoordinatorMessage.TxnAcceptMsg msg) {
         acceptedTxn = true;
         acceptTimeout.cancel();
         readTwo();
     }
 
-    private void onTxnAcceptTimeoutMsg(ClientCoordinatorMessages.TxnAcceptTimeoutMsg msg) throws InterruptedException {
-        if(!acceptedTxn) beginTxn();
-    }
 
-    private void onReadResultMsg(ClientCoordinatorMessages.ReadResultMsg msg) {
+
+    private void onReadResultMsg(ClientCoordinatorMessage.ReadResultMsg msg) {
         if(Main.CLIENT_DEBUG_READ_RESULT)
             System.out.println("CLIENT " + clientId + " READ RESULT (" + msg.key + ", " + msg.value + ")");
 
@@ -158,6 +166,7 @@ public class Client extends AbstractActor {
         if(msg.key.equals(secondKey)) secondValue = msg.value;
 
         boolean opDone = (firstValue != null && secondValue != null);
+        if (opDone) operationTimeout.cancel();
 
         // do we only read or also write?
         double writeRandom = r.nextDouble();
@@ -174,15 +183,34 @@ public class Client extends AbstractActor {
         }
     }
 
-    private void onTxnResultMsg(ClientCoordinatorMessages.TxnResultMsg msg) throws InterruptedException {
-        if (msg.commit) {
-            numCommittedTxn++;
-            if(Main.CLIENT_DEBUG_COMMIT_OK)
-                System.out.println("CLIENT " + clientId + " COMMIT OK (" + numCommittedTxn + "/" + numAttemptedTxn + ")");
-        } else {
-            if(Main.CLIENT_DEBUG_COMMIT_KO)
-                System.out.println("CLIENT " + clientId + " COMMIT FAIL (" + (numAttemptedTxn - numCommittedTxn) + "/" + numAttemptedTxn + ")");
+    private void onTxnResultMsg(ClientCoordinatorMessage.TxnResultMsg msg) throws InterruptedException {
+        if (msg.numAttemptedTxn == numAttemptedTxn) {
+            operationTimeout.cancel();
+            if (msg.commit) {
+                numCommittedTxn++;
+                if (Main.CLIENT_DEBUG_COMMIT_OK)
+                    System.out.println("CLIENT " + clientId + " COMMIT OK (" + numCommittedTxn + "/" + numAttemptedTxn + ")");
+            } else {
+                if (Main.CLIENT_DEBUG_COMMIT_KO)
+                    System.out.println("CLIENT " + clientId + " COMMIT FAIL (" + (numAttemptedTxn - numCommittedTxn) + "/" + numAttemptedTxn + ")");
+            }
+            beginTxn();
         }
+    }
+
+
+    private void onTxnAcceptTimeoutMsg(TimeoutMessages.Client.TxnAcceptMsg msg) throws InterruptedException {
+        if(!acceptedTxn) {
+            if(Main.CLIENT_DEBUG_TIMEOUT_TXN_ACCEPT)
+                System.out.println("CLIENT " + clientId + " TIMEOUT DURING ACCEPT, ABORTING CURRENT TRANSACTION");
+            beginTxn();
+        }
+    }
+
+    private void onTxnOperationTimeoutMsg(TimeoutMessages.Client.TxnOperationMsg msg) throws InterruptedException {
+        // abort
+        if(Main.CLIENT_DEBUG_TIMEOUT_TXN_OPERATION)
+            System.out.println("CLIENT " + clientId + " TIMEOUT DURING OPERATION, ABORTING CURRENT TRANSACTION");
         beginTxn();
     }
 
@@ -190,11 +218,12 @@ public class Client extends AbstractActor {
     public Receive createReceive() {
         return receiveBuilder()
                 .match(Message.WelcomeMsg.class,  this::onWelcomeMsg)
-                .match(ClientCoordinatorMessages.TxnAcceptMsg.class,  this::onTxnAcceptMsg)
-                .match(ClientCoordinatorMessages.TxnAcceptTimeoutMsg.class,  this::onTxnAcceptTimeoutMsg)
-                .match(ClientCoordinatorMessages.ReadResultMsg.class,  this::onReadResultMsg)
-                .match(ClientCoordinatorMessages.TxnResultMsg.class,  this::onTxnResultMsg)
-                .match(ClientCoordinatorMessages.StopMsg.class,  this::onStopMsg)
+                .match(ClientCoordinatorMessage.TxnAcceptMsg.class,  this::onTxnAcceptMsg)
+                .match(ClientCoordinatorMessage.ReadResultMsg.class,  this::onReadResultMsg)
+                .match(ClientCoordinatorMessage.TxnResultMsg.class,  this::onTxnResultMsg)
+                .match(ClientCoordinatorMessage.StopMsg.class,  this::onStopMsg)
+                .match(TimeoutMessages.Client.TxnAcceptMsg.class,  this::onTxnAcceptTimeoutMsg)
+                .match(TimeoutMessages.Client.TxnOperationMsg.class,  this::onTxnOperationTimeoutMsg)
                 .build();
     }
 }

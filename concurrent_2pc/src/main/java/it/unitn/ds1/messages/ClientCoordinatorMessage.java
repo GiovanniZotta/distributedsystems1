@@ -1,14 +1,8 @@
 package it.unitn.ds1.messages;
 
-import akka.actor.ActorRef;
-import it.unitn.ds1.messages.Message;
-
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
-public class ClientCoordinatorMessages extends Message {
+public class ClientCoordinatorMessage extends Message {
 
 
     // message the client sends to a coordinator to begin the TXN
@@ -24,9 +18,6 @@ public class ClientCoordinatorMessages extends Message {
 
     // reply from the coordinator receiving TxnBeginMsg
     public static class TxnAcceptMsg implements Serializable {}
-
-    // the client may timeout waiting for TXN begin confirmation (TxnAcceptMsg)
-    public static class TxnAcceptTimeoutMsg implements Serializable {}
 
     // message the client sends to a coordinator to end the TXN;
     // it may ask for commit (with probability COMMIT_PROBABILITY), or abort
@@ -74,8 +65,10 @@ public class ClientCoordinatorMessages extends Message {
     // message from the coordinator to the client with the outcome of the TXN
     public static class TxnResultMsg implements Serializable {
         public final Boolean commit; // if false, the transaction was aborted
-        public TxnResultMsg(boolean commit) {
+        public final Integer numAttemptedTxn;
+        public TxnResultMsg(boolean commit, Integer numAttemptedTxn) {
             this.commit = commit;
+            this.numAttemptedTxn = numAttemptedTxn;
         }
     }
 

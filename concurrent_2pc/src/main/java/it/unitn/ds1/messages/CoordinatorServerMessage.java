@@ -4,7 +4,7 @@ import it.unitn.ds1.transactions.Transaction;
 
 import java.io.Serializable;
 
-public class CoordinatorServerMessages extends Message {
+public class CoordinatorServerMessage extends Message {
 
     public enum Vote {NO, YES}
 
