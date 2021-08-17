@@ -15,20 +15,41 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public abstract class Node extends AbstractActor {
-    public static interface CrashPhase {}
-    protected static final double CRASH_PROBABILITY = 0;
+    public interface CrashPhase {}
+    public static class CrashPhaseMap extends HashMap<CrashPhase, Integer> {
+        @Override
+        public String toString() {
+            String res = "";
+            for (Entry<CrashPhase, Integer> entry : this.entrySet()){
+                res += entry.getKey().toString() + ": " + entry.getValue() + "\n";
+            }
+            return res.substring(0, res.length() - 1);
+        }
+
+        public static CrashPhaseMap sumMaps(Collection<CrashPhaseMap> maps) {
+            CrashPhaseMap res = new CrashPhaseMap();
+            for (CrashPhaseMap map : maps)
+                for (Entry<CrashPhase, Integer> entry : map.entrySet())
+                    res.put(entry.getKey(), res.getOrDefault(entry.getKey(), 0) + entry.getValue());
+            return res;
+        }
+    }
+
+    protected static final double CRASH_PROBABILITY = 0.1;
     protected int id;                           // node ID
     protected List<ActorRef> servers;      // list of participant nodes
     protected ActorRef checker;
     protected final Map<Transaction, CoordinatorServerMessage.Decision> transaction2decision;
     protected final Random r;
     protected final Set<CrashPhase> crashPhases;
+    protected final CrashPhaseMap numCrashes;
 
     public Node(int id, Set<CrashPhase> crashPhases) {
         super();
         this.id = id;
         this.crashPhases = crashPhases;
         transaction2decision = new HashMap<>();
+        numCrashes = new CrashPhaseMap();
         r = new Random();
     }
 
@@ -49,8 +70,9 @@ public abstract class Node extends AbstractActor {
     }
 
     // emulate a crash and a recovery in a given time
-    void crash(int recoverIn) {
+    void crash(int recoverIn, CrashPhase crashPhase) {
         getContext().become(crashed());
+        numCrashes.put(crashPhase, numCrashes.getOrDefault(crashPhase, 0) + 1);
         if(Main.NODE_DEBUG_CRASH)
             print("CRASH!!!");
 
@@ -63,9 +85,9 @@ public abstract class Node extends AbstractActor {
         );
     }
 
-    Boolean maybeCrash() {
-        if (false && r.nextDouble() < CRASH_PROBABILITY) {
-            crash(1 + r.nextInt(Main.MAX_RECOVERY_TIME));
+    Boolean maybeCrash(CrashPhase crashPhase) {
+        if (crashPhases.contains(crashPhase) && r.nextDouble() < CRASH_PROBABILITY) {
+            crash(1 + r.nextInt(Main.MAX_RECOVERY_TIME), crashPhase);
             return true;
         }
         return false;

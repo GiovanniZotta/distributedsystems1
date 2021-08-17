@@ -16,11 +16,29 @@ import java.util.*;
 
 public class Coordinator extends Node {
 
-
-    public enum CrashBefore2PC implements CrashPhase {BEFORE_TXN_ACCEPT_MSG, ON_CLIENT_MSG, ON_SERVER_MSG}
+    public enum CrashBefore2PC implements CrashPhase {BEFORE_TXN_ACCEPT_MSG, ON_CLIENT_MSG, ON_SERVER_MSG;
+        public String toString() {
+            return "CoordinatorCrashBefore2PC_" + name();
+        }
+    }
     public static class CrashDuring2PC {
-        public enum CrashDuringVote {ZERO_MSG, RND_MSG, ALL_MSG}
-        public enum CrashDuringDecision {ZERO_MSG, RND_MSG, ALL_MSG}
+        public enum CrashDuringVote {
+            ZERO_MSG, RND_MSG, ALL_MSG;
+            @Override
+            public String toString() {
+                return CrashDuring2PC.name() + "_CrashDuringVote_" + name();
+            }
+        }
+        public enum CrashDuringDecision {
+            ZERO_MSG, RND_MSG, ALL_MSG;
+            @Override
+            public String toString() {
+                return CrashDuring2PC.name() + "_CrashDuringDecision_" + name();
+            }
+        }
+        public static String name() {
+            return "CoordinatorCrashDuring2PC";
+        }
     }
 
     // here all the nodes that sent YES are collected
@@ -37,6 +55,7 @@ public class Coordinator extends Node {
 
     public Coordinator(int id, Set<CrashPhase> crashPhases) {
         super(id, crashPhases);
+        System.out.println("AAAAAAAAAAAAAAAAAAAAAA" + (CrashBefore2PC.BEFORE_TXN_ACCEPT_MSG.equals(CrashDuring2PC.CrashDuringVote.ZERO_MSG) ? "UGUALIII!!!" : "DIVERSE!!!"));
     }
 
     static public Props props(int id,  Set<CrashPhase> crashPhases) {
@@ -175,7 +194,7 @@ public class Coordinator extends Node {
         transaction2client.put(t, getSender());
         pendingTransactions.add(t);
         // send accept
-        if (!crashPhases.contains(CrashBefore2PC.BEFORE_TXN_ACCEPT_MSG) || !maybeCrash())
+        if (!maybeCrash(CrashBefore2PC.BEFORE_TXN_ACCEPT_MSG))
             getSender().tell(new ClientCoordinatorMessage.TxnAcceptMsg(), getSelf());
     }
 
@@ -201,9 +220,7 @@ public class Coordinator extends Node {
 
     private Boolean trackServerForTxn(CoordinatorTransaction transaction, Integer serverId) {
         transaction.getServers().add(servers.get(serverId));
-        if (crashPhases.contains(CrashBefore2PC.ON_CLIENT_MSG))
-            return maybeCrash();
-        return false;
+        return maybeCrash(CrashBefore2PC.ON_CLIENT_MSG);
     }
 
     public void onReadMsg (ClientCoordinatorMessage.ReadMsg msg) {
@@ -216,7 +233,7 @@ public class Coordinator extends Node {
 
     public void onTxnReadResponseMsg(CoordinatorServerMessage.TxnReadResponseMsg msg) {
         ActorRef c = transaction2client.get(msg.transaction);
-        if (!crashPhases.contains(CrashBefore2PC.ON_SERVER_MSG) || !maybeCrash())
+        if (!maybeCrash(CrashBefore2PC.ON_SERVER_MSG))
             c.tell(new ClientCoordinatorMessage.ReadResultMsg(msg.key, msg.valueRead), getSelf());
     }
 

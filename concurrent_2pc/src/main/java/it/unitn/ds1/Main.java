@@ -67,7 +67,7 @@ public class Main {
         System.out.println("Servers created");
 
         // Create the checker
-        ActorRef checker = system.actorOf(Checker.props(N_SERVER, new HashSet<>()), "checker");
+        ActorRef checker = system.actorOf(Checker.props(), "checker");
 
 
         // Send start messages to the clients
@@ -89,7 +89,7 @@ public class Main {
             peer.tell(checkerMsg, null);
             peer.tell(startOthers, null);
         }
-        checker.tell(startOthers, null);
+        checker.tell(new Message.CheckerWelcomeMsg(MAX_KEY, servers, coordinators), null);
 
         try {
             System.out.println(">>> Press ENTER to exit <<<");

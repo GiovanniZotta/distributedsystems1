@@ -18,10 +18,33 @@ import java.util.*;
 public class Server extends Node {
 
 
-    public enum CrashBefore2PC {ON_COORD_MSG}
+    public enum CrashBefore2PC {
+        ON_COORD_MSG;
+        @Override
+        public String toString() {
+            return "ServerCrashBefore2PC_" + name();
+        }
+    }
     public static class CrashDuring2PC {
-        public enum CrashDuringVote {NO_VOTE, AFTER_VOTE}
-        public enum CrashDuringTermination {NO_REPLY, RND_REPLY, ALL_REPLY}
+        public enum CrashDuringVote {
+            NO_VOTE, AFTER_VOTE;
+            @Override
+            public String toString() {
+                return Server.CrashDuring2PC.name() + "_CrashDuringVote_" + name();
+            }
+        }
+
+        private static String name() {
+            return "ServerCrashDuring2PC";
+        }
+
+        public enum CrashDuringTermination {
+            NO_REPLY, RND_REPLY, ALL_REPLY;
+            @Override
+            public String toString() {
+                return Server.CrashDuring2PC.name() + "_CrashDuringTermination_" + name();
+            }
+        }
     }
 
     public static final Integer DEFAULT_VALUE = 100;
@@ -217,7 +240,7 @@ public class Server extends Node {
         for (Integer key: database.keySet()) {
             result += database.get(key).getValue();
         }
-        getSender().tell(new Message.CheckCorrectnessResponse(result), getSelf());
+        getSender().tell(new Message.CheckCorrectnessResponse(id, result, numCrashes), getSelf());
     }
 
 }
