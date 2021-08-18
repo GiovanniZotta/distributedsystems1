@@ -1,14 +1,22 @@
 package it.unitn.ds1.transactions;
 
 
+import akka.actor.Cancellable;
+import akka.util.Timeout;
+
 import java.util.AbstractMap;
 import java.util.Map;
 
 public class Transaction implements Cloneable {
+    public enum State {INIT, READY, DECIDED};
+
     private Map.Entry<Integer, Integer> txnId;
+    private State state;
+    private Cancellable timeout;
 
     public Transaction(Integer clientId, Integer numAttemptedTxn) {
         this.txnId = new AbstractMap.SimpleEntry<>(clientId, numAttemptedTxn);
+        state = State.INIT;
     }
 
     public Integer getClientId() {
@@ -40,5 +48,21 @@ public class Transaction implements Cloneable {
 
     public Map.Entry<Integer, Integer> getTxnId() {
         return txnId;
+    }
+
+    public State getState() {
+        return state;
+    }
+
+    public void setState(State state) {
+        this.state = state;
+    }
+
+    public Cancellable getTimeout() {
+        return timeout;
+    }
+
+    public void setTimeout(Cancellable timeout) {
+        this.timeout = timeout;
     }
 }

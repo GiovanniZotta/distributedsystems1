@@ -44,7 +44,7 @@ public abstract class Node extends AbstractActor {
         }
     }
 
-    protected static final double CRASH_PROBABILITY = 0.1;
+    protected static final double CRASH_PROBABILITY = 0.001;
     protected int id;                           // node ID
     protected List<ActorRef> servers;      // list of participant nodes
     protected ActorRef checker;
@@ -63,7 +63,7 @@ public abstract class Node extends AbstractActor {
     }
 
     // abstract method to be implemented in extending classes
-    protected abstract void onRecovery(CoordinatorServerMessage.Recovery msg);
+    protected abstract void onRecoveryMsg(CoordinatorServerMessage.RecoveryMsg msg);
 
     void setGroup(Message.WelcomeMsg sm) {
         servers = new ArrayList<>();
@@ -89,14 +89,14 @@ public abstract class Node extends AbstractActor {
         getContext().system().scheduler().scheduleOnce(
                 Duration.create(recoverIn, TimeUnit.MILLISECONDS),
                 getSelf(),
-                new CoordinatorServerMessage.Recovery(), // message sent to myself
+                new CoordinatorServerMessage.RecoveryMsg(), // message sent to myself
                 getContext().system().dispatcher(), getSelf()
         );
     }
 
     Boolean maybeCrash(CrashPhase crashPhase) {
         if (crashPhases.contains(crashPhase) && r.nextDouble() < CRASH_PROBABILITY) {
-            crash(1 + r.nextInt(Main.MAX_RECOVERY_TIME), crashPhase);
+            crash(600 + r.nextInt(Main.MAX_RECOVERY_TIME), crashPhase);
             return true;
         }
         return false;
@@ -110,25 +110,26 @@ public abstract class Node extends AbstractActor {
         }
     }
 
-    void multicast(Serializable m, Collection<ActorRef> group) {
+    void multicast(CoordinatorServerMessage m, Collection<ActorRef> group) {
+        multicast(m, group, false);
+    }
+    void multicast(CoordinatorServerMessage m, Collection<ActorRef> group, Boolean setTimeout) {
         for (ActorRef p : group)
-            p.tell(m, getSelf());
+            sendMessage(p, m, setTimeout);
     }
 
     // a multicast implementation that crashes after sending the first message
     abstract void multicastAndCrash(Serializable m, int recoverIn);
 
     // schedule a Timeout message in specified time
-    void setTimeout(int time) {
-        getContext().system().scheduler().scheduleOnce(
+    void setTimeout(int time, Transaction transaction) {
+        transaction.setTimeout(getContext().system().scheduler().scheduleOnce(
                 Duration.create(time, TimeUnit.MILLISECONDS),
                 getSelf(),
-                new CoordinatorServerMessage.Timeout(), // the message to send
+                new CoordinatorServerMessage.TimeoutMsg(transaction), // the message to send
                 getContext().system().dispatcher(), getSelf()
-        );
+        ));
     }
-
-    abstract void fixDecision(Transaction transaction, CoordinatorServerMessage.Decision d);
 
     boolean hasDecided(Transaction transaction) {
         return transaction2decision.get(transaction) != null;
@@ -148,7 +149,7 @@ public abstract class Node extends AbstractActor {
 
     public Receive crashed() {
         return receiveBuilder()
-                .match(CoordinatorServerMessage.Recovery.class, this::onRecovery)
+                .match(CoordinatorServerMessage.RecoveryMsg.class, this::onRecoveryMsg)
                 .match(Message.CheckerMsg.class, this::onCheckerMsg)
                 .match(Message.CheckCorrectness.class, this::onCheckCorrectness)
                 .matchAny(msg -> {
@@ -163,10 +164,34 @@ public abstract class Node extends AbstractActor {
     public void onDecisionRequest(CoordinatorServerMessage.DecisionRequest msg) {  /* Decision Request */
         Transaction transaction = msg.transaction;
         if (hasDecided(transaction))
-            getSender().tell(new CoordinatorServerMessage.DecisionResponse(transaction, transaction2decision.get(transaction)), getSelf());
+            reply(new CoordinatorServerMessage.DecisionResponse(transaction, transaction2decision.get(transaction)));
 
         // just ignoring if we don't know the decision
     }
 
     public abstract void onCheckCorrectness(Message.CheckCorrectness msg);
+
+    protected void sendMessage(ActorRef to, CoordinatorServerMessage msg, Boolean setTimeout) {
+        to.tell(msg, getSelf());
+        if (setTimeout)
+            setTimeout(Main.TIMEOUT, msg.transaction);
+    }
+
+    protected void sendMessage(ActorRef to, Message msg) {
+        to.tell(msg, getSelf());
+    }
+
+    protected void reply(CoordinatorServerMessage msg, Boolean setTimeout) {
+        sendMessage(getSender(), msg, setTimeout);
+    }
+
+    protected void reply(Message msg) {
+        sendMessage(getSender(), msg);
+    }
+
+    protected void unsetTimeout(Transaction transaction) {
+        if (transaction.getTimeout() != null)
+            transaction.getTimeout().cancel();
+        transaction.setTimeout(null);
+    }
 }

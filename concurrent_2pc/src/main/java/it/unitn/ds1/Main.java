@@ -57,6 +57,7 @@ public class Main {
         Set<Node.CrashPhase> coordinatorCrashPhases = new HashSet<>();
         coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.BEFORE_TXN_ACCEPT_MSG);
         coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.ON_CLIENT_MSG);
+        coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.ON_SERVER_MSG);
         for (int i = 0; i < N_COORDINATORS; i++)
             coordinators.add(system.actorOf(Coordinator.props(i, coordinatorCrashPhases), "coordinator" + i));
         System.out.println("Coordinators created");

@@ -34,16 +34,16 @@ public class Server extends Node {
             }
         }
 
-        private static String name() {
-            return "ServerCrashDuring2PC";
-        }
-
         public enum CrashDuringTermination {
             NO_REPLY, RND_REPLY, ALL_REPLY;
             @Override
             public String toString() {
                 return Server.CrashDuring2PC.name() + "_CrashDuringTermination_" + name();
             }
+        }
+
+        private static String name() {
+            return "ServerCrashDuring2PC";
         }
     }
 
@@ -71,8 +71,8 @@ public class Server extends Node {
                 .match(CoordinatorServerMessage.VoteRequest.class, this::onVoteRequest)
                 .match(CoordinatorServerMessage.DecisionRequest.class, this::onDecisionRequest)
                 .match(CoordinatorServerMessage.DecisionResponse.class, this::onDecisionResponse)
-                .match(CoordinatorServerMessage.Timeout.class, this::onTimeout)
-                .match(CoordinatorServerMessage.Recovery.class, this::onRecovery)
+                .match(CoordinatorServerMessage.TimeoutMsg.class, this::onTimeout)
+                .match(CoordinatorServerMessage.RecoveryMsg.class, this::onRecoveryMsg)
                 .match(CoordinatorServerMessage.TransactionRead.class, this::onTransactionRead)
                 .match(CoordinatorServerMessage.TransactionWrite.class, this::onTransactionWrite)
                 .match(Message.CheckCorrectness.class, this::onCheckCorrectness)
@@ -99,6 +99,7 @@ public class Server extends Node {
 
 
     private void freeWorkspace(Transaction transaction){
+        unsetTimeout(transaction);
         freePendingResources(transaction);
         transactionMap.remove(transaction);
 //        transaction2coordinator.remove(transaction);
@@ -131,25 +132,36 @@ public class Server extends Node {
             vote = CoordinatorServerMessage.Vote.NO;
         } else {
             lockResources(transaction);
+            transactionMap.get(msg.transaction).setState(Transaction.State.READY);
             vote = CoordinatorServerMessage.Vote.YES;
         }
         if(Main.SERVER_DEBUG_SEND_VOTE)
             print("Server " + id + " sending vote " + vote);
-        getSender().tell(new CoordinatorServerMessage.VoteResponse(transaction, vote), getSelf());
+        reply(new CoordinatorServerMessage.VoteResponse(transaction, vote), true);
 //        setTimeout(Main.DECISION_TIMEOUT);
     }
 
-    public void onTimeout(CoordinatorServerMessage.Timeout msg) {
-//        if (!hasDecided()) {
-//            print("Timeout. Asking around.");
-//
-//            // TODO 3: participant termination protocol
-//            // termination protocol: ask group if anybody knows the decision
-//        }
+    public void onTimeout(CoordinatorServerMessage.TimeoutMsg msg) {
+//        System.out.println("ASDASDADSDADSADA");
+        if (!hasDecided(msg.transaction)) {
+            System.out.println("Server " + id + " timeout for transaction from client " + msg.transaction.getClientId());
+            if (transactionMap.get(msg.transaction).getState() == Transaction.State.INIT)
+                fixDecision(msg.transaction, CoordinatorServerMessage.Decision.ABORT);
+            else {
+                // TODO if voted commit do termination protocol
+            }
+        }
+        //        if (!hasDecided()) {
+        //            print("Timeout. Asking around.");
+        //
+        //            // TODO 3: participant termination protocol
+        //            // termination protocol: ask group if anybody knows the decision
+        //        }
     }
 
     @Override
-    public void onRecovery(CoordinatorServerMessage.Recovery msg) {
+    public void onRecoveryMsg(CoordinatorServerMessage.RecoveryMsg msg) {
+
 //        getContext().become(createReceive());
 //
 //        // We don't handle explicitly the "not voted" case here
@@ -183,10 +195,10 @@ public class Server extends Node {
         }
     }
 
-    @Override
     void fixDecision(Transaction transaction, CoordinatorServerMessage.Decision d) {
-        if (!hasDecided(transaction)) {
+        if (!hasDecided(transaction) && transactionMap.containsKey(transaction)) {
             transaction2decision.put(transaction, d);
+            transactionMap.get(transaction).setState(Transaction.State.DECIDED);
             if(Main.SERVER_DEBUG_DECIDED)
                 print(" Server decided " + d);
             if(d == CoordinatorServerMessage.Decision.COMMIT){
@@ -223,8 +235,7 @@ public class Server extends Node {
 
     public void onTransactionRead(CoordinatorServerMessage.TransactionRead msg) {
         int valueRead = processWorkspace(msg).getValue();
-        getSender().tell(new CoordinatorServerMessage.TxnReadResponseMsg(msg.transaction, msg.key, valueRead),
-                getSelf());
+        reply(new CoordinatorServerMessage.TxnReadResponseMsg(msg.transaction, msg.key, valueRead));
     }
 
 
@@ -241,7 +252,7 @@ public class Server extends Node {
         for (Integer key: database.keySet()) {
             result += database.get(key).getValue();
         }
-        getSender().tell(new Message.CheckCorrectnessResponse(id, result, numCrashes), getSelf());
+        reply(new Message.CheckCorrectnessResponse(id, result, numCrashes));
     }
 
 }

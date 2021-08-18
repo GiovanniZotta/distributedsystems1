@@ -2,7 +2,7 @@ package it.unitn.ds1.messages;
 
 import java.io.Serializable;
 
-public class TimeoutMessages {
+public abstract class TimeoutMessages extends Message {
     public static class Client {
         // the client may timeout waiting for TXN begin confirmation (TxnAcceptMsg)
         public static class TxnAcceptMsg implements Serializable {}

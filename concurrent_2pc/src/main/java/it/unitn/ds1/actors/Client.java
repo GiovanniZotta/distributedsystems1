@@ -12,7 +12,7 @@ import it.unitn.ds1.messages.TimeoutMessages;
 import scala.concurrent.duration.Duration;
 
 public class Client extends AbstractActor {
-    private static final double COMMIT_PROBABILITY = 0.8;
+    private static final double COMMIT_PROBABILITY = 1;
     private static final double WRITE_PROBABILITY = 0.5;
     private static final int MIN_TXN_LENGTH = 20;
     private static final int MAX_TXN_LENGTH = 40;

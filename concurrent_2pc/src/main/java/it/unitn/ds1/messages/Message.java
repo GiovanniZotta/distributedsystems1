@@ -2,6 +2,7 @@ package it.unitn.ds1.messages;
 
 import akka.actor.ActorRef;
 import it.unitn.ds1.actors.Node;
+import it.unitn.ds1.transactions.Transaction;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -9,10 +10,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-public class Message {
+public abstract class Message implements Serializable {
 
     // send this message to the client at startup to inform it about the group and the keys
-    public static class WelcomeMsg implements Serializable {
+    public static class WelcomeMsg extends Message {
         public final Integer maxKey;
         public final List<ActorRef> group;
         public WelcomeMsg(int maxKey, List<ActorRef> group) {
@@ -21,7 +22,7 @@ public class Message {
         }
     }
 
-    public static class CheckerWelcomeMsg implements Serializable {
+    public static class CheckerWelcomeMsg extends Message {
         public final Integer maxKey;
         public final List<ActorRef> servers;
         public final List<ActorRef> coordinators;
@@ -33,10 +34,10 @@ public class Message {
         }
     }
 
-    public static class CheckCorrectness implements Serializable {
+    public static class CheckCorrectness extends Message {
     }
 
-    public static class CheckCorrectnessResponse implements Serializable {
+    public static class CheckCorrectnessResponse extends Message {
         public final Integer id;
         public final Integer sumOfKeys;
         public final Node.CrashPhaseMap numCrashes;
@@ -48,7 +49,7 @@ public class Message {
         }
     }
 
-    public static class CheckerMsg implements Serializable {
+    public static class CheckerMsg extends Message {
         public final ActorRef checker;
 
         public CheckerMsg(ActorRef checker) {
@@ -56,6 +57,7 @@ public class Message {
         }
     }
 
-    public static class StopMsg implements Serializable {
+    public static class StopMsg extends Message {
     }
+
 }

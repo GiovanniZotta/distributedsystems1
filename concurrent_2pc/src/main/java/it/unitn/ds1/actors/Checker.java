@@ -59,8 +59,7 @@ public class Checker extends AbstractActor {
     }
 
     private void printCrashes(Map<ActorRef, Node.CrashPhaseMap> numCoordinatorCrashes) {
-        System.out.println(numCoordinatorCrashes.values());
-        System.out.println(Node.CrashPhaseMap.sumMaps(numCoordinatorCrashes.values()).size());
+        System.out.println(Node.CrashPhaseMap.sumMaps(numCoordinatorCrashes.values()));
     }
 
     private void manageServer(Message.CheckCorrectnessResponse msg) throws InterruptedException {

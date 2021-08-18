@@ -45,9 +45,6 @@ public class Coordinator extends Node {
     private final Map<ActorRef, CoordinatorTransaction> client2transaction = new HashMap<>();
     private final Map<Transaction, ActorRef> transaction2client = new HashMap<>();
     private final Set<Transaction> pendingTransactions = new HashSet<>();
-    public Integer crashAfterZero = 0;
-    public Integer crashAfterRandom = 0;
-    public Integer crashAfterAll = 0;
 
     boolean allVotedYes(CoordinatorTransaction transaction) { // returns true if all voted YES
         return transaction.getYesVoters().size() == transaction.getServers().size();
@@ -63,11 +60,12 @@ public class Coordinator extends Node {
 
     @Override
     public Receive createReceive() {
+
         return receiveBuilder()
-                .match(CoordinatorServerMessage.Recovery.class, this::onRecovery)
+                .match(CoordinatorServerMessage.RecoveryMsg.class, this::onRecoveryMsg)
                 .match(Message.WelcomeMsg.class, this::onWelcomeMsg)
                 .match(CoordinatorServerMessage.VoteResponse.class, this::onVoteResponse)
-                .match(CoordinatorServerMessage.Timeout.class, this::onTimeout)
+                .match(CoordinatorServerMessage.TimeoutMsg.class, this::onTimeoutMsg)
                 .match(CoordinatorServerMessage.DecisionRequest.class, this::onDecisionRequest)
                 .match(ClientCoordinatorMessage.TxnBeginMsg.class, this::onTxnBeginMsg)
                 .match(ClientCoordinatorMessage.TxnEndMsg.class, this::onTxnEndMsg)
@@ -118,17 +116,16 @@ public class Coordinator extends Node {
     }
 
     // fix the final decision of the current node
-    @Override
-    void fixDecision(Transaction transaction, CoordinatorServerMessage.Decision d) {
+    void fixDecision(CoordinatorTransaction transaction, CoordinatorServerMessage.Decision d) {
         if (!hasDecided(transaction)) {
             transaction2decision.put(transaction, d);
+            transaction.setState(Transaction.State.DECIDED);
             ActorRef client = transaction2client.get(transaction);
             assert(client != null);
-            client.tell(
+            sendMessage(client,
                     new ClientCoordinatorMessage.TxnResultMsg(
                             d == CoordinatorServerMessage.Decision.COMMIT,
-                            transaction.getNumAttemptedTxn()), getSelf()
-            );
+                            transaction.getNumAttemptedTxn()));
             pendingTransactions.remove(transaction);
             client2transaction.remove(client);
             transaction2client.remove(transaction);
@@ -165,7 +162,8 @@ public class Coordinator extends Node {
         }
     }
 
-    public void onTimeout(CoordinatorServerMessage.Timeout msg) {
+    public void onTimeoutMsg(CoordinatorServerMessage.TimeoutMsg msg) {
+        unsetTimeout(msg.transaction);
 //        if (!hasDecided(tra)) {
 //            print("Timeout");
 //
@@ -176,7 +174,7 @@ public class Coordinator extends Node {
 
 
     @Override
-    public void onRecovery(CoordinatorServerMessage.Recovery msg) {
+    public void onRecoveryMsg(CoordinatorServerMessage.RecoveryMsg msg) {
         getContext().become(createReceive());
 
         for (Transaction t : new HashSet<>(pendingTransactions)) {
@@ -199,6 +197,7 @@ public class Coordinator extends Node {
     }
 
     private void takeDecision(Transaction transaction, CoordinatorServerMessage.Decision decision){
+        unsetTimeout(transaction);
         CoordinatorTransaction transaction1 = getCTfromTransaction(transaction);
         fixDecision(transaction1, decision);
         multicast(new CoordinatorServerMessage.DecisionResponse(transaction1, transaction2decision.get(transaction1)), transaction1.getServers());
@@ -208,6 +207,7 @@ public class Coordinator extends Node {
         CoordinatorTransaction transaction = client2transaction.get(getSender());
         if(msg.commit){
             multicast(new CoordinatorServerMessage.VoteRequest(transaction), transaction.getServers());
+            transaction.setState(Transaction.State.READY);
         } else {
             takeDecision(transaction, CoordinatorServerMessage.Decision.ABORT);
         }
@@ -228,10 +228,11 @@ public class Coordinator extends Node {
         int serverId = key / Server.DB_SIZE;
         CoordinatorTransaction transaction = client2transaction.get(getSender());
         if (!trackServerForTxn(transaction, serverId))
-            servers.get(serverId).tell(new CoordinatorServerMessage.TransactionRead(transaction, key), getSelf());
+            sendMessage(servers.get(serverId), new CoordinatorServerMessage.TransactionRead(transaction, key), true);
     }
 
     public void onTxnReadResponseMsg(CoordinatorServerMessage.TxnReadResponseMsg msg) {
+        unsetTimeout(msg.transaction);
         ActorRef c = transaction2client.get(msg.transaction);
         if (!maybeCrash(CrashBefore2PC.ON_SERVER_MSG))
             c.tell(new ClientCoordinatorMessage.ReadResultMsg(msg.key, msg.valueRead), getSelf());
@@ -243,7 +244,7 @@ public class Coordinator extends Node {
         int serverId = key / Server.DB_SIZE;
         CoordinatorTransaction transaction = client2transaction.get(getSender());
         if (!trackServerForTxn(transaction, serverId))
-           servers.get(serverId).tell(new CoordinatorServerMessage.TransactionWrite(transaction, key, value), getSelf());
+            sendMessage(servers.get(serverId), new CoordinatorServerMessage.TransactionWrite(transaction, key, value), true);
     }
 
     @Override
