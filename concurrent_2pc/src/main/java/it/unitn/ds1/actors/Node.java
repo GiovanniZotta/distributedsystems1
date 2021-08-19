@@ -52,6 +52,7 @@ public abstract class Node extends AbstractActor {
     protected final Random r;
     protected final Set<CrashPhase> crashPhases;
     protected final CrashPhaseMap numCrashes;
+    protected final Set<Transaction> pendingTransactions = new HashSet<>();
 
     public Node(int id, Set<CrashPhase> crashPhases) {
         super();
@@ -83,7 +84,7 @@ public abstract class Node extends AbstractActor {
         getContext().become(crashed());
         numCrashes.put(crashPhase, numCrashes.getOrDefault(crashPhase, 0) + 1);
         if(Main.NODE_DEBUG_CRASH)
-            print("CRASH!!!");
+            print("CRASH in phase " + crashPhase);
 
         // setting a timer to "recover"
         getContext().system().scheduler().scheduleOnce(
@@ -96,7 +97,7 @@ public abstract class Node extends AbstractActor {
 
     Boolean maybeCrash(CrashPhase crashPhase) {
         if (crashPhases.contains(crashPhase) && r.nextDouble() < CRASH_PROBABILITY) {
-            crash(600 + r.nextInt(Main.MAX_RECOVERY_TIME), crashPhase);
+            crash(Main.MIN_RECOVERY_TIME + r.nextInt(Main.MAX_RECOVERY_TIME - Main.MIN_RECOVERY_TIME), crashPhase);
             return true;
         }
         return false;
@@ -137,7 +138,8 @@ public abstract class Node extends AbstractActor {
 
     // a simple logging function
     void print(String s) {
-        System.out.format("%2d: %s\n", id, s);
+
+        System.out.format("%s %2d: %s\n", this.getClass().getSimpleName(), id, s);
     }
 
     @Override
@@ -194,4 +196,5 @@ public abstract class Node extends AbstractActor {
             transaction.getTimeout().cancel();
         transaction.setTimeout(null);
     }
+
 }

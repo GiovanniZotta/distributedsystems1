@@ -1,8 +1,13 @@
 package it.unitn.ds1.messages;
 
+import akka.actor.ActorRef;
 import it.unitn.ds1.transactions.Transaction;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
 
 public abstract class CoordinatorServerMessage extends Message {
 
@@ -18,9 +23,11 @@ public abstract class CoordinatorServerMessage extends Message {
     }
 
     public static class VoteRequest extends CoordinatorServerMessage {
+        public final List<ActorRef> servers;
 
-        public VoteRequest(Transaction transaction) {
+        public VoteRequest(Transaction transaction, Set<ActorRef> servers) {
             super(transaction);
+            this.servers = Collections.unmodifiableList(new ArrayList<>(servers));;
         }
     }
 

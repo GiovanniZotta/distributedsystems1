@@ -1,5 +1,6 @@
 package it.unitn.ds1.actors;
 
+import akka.actor.ActorRef;
 import akka.actor.Props;
 import it.unitn.ds1.Main;
 import it.unitn.ds1.resources.Resource;
@@ -18,15 +19,15 @@ import java.util.*;
 public class Server extends Node {
 
 
-    public enum CrashBefore2PC {
+    public enum CrashBefore2PC implements CrashPhase {
         ON_COORD_MSG;
         @Override
         public String toString() {
             return "ServerCrashBefore2PC_" + name();
         }
     }
-    public static class CrashDuring2PC {
-        public enum CrashDuringVote {
+    public static class CrashDuring2PC{
+        public enum CrashDuringVote implements CrashPhase {
             NO_VOTE, AFTER_VOTE;
             @Override
             public String toString() {
@@ -34,7 +35,7 @@ public class Server extends Node {
             }
         }
 
-        public enum CrashDuringTermination {
+        public enum CrashDuringTermination implements CrashPhase {
             NO_REPLY, RND_REPLY, ALL_REPLY;
             @Override
             public String toString() {
@@ -84,24 +85,29 @@ public class Server extends Node {
     }
 
     private Boolean canCommit(Transaction transaction){
-        Workspace workspace = transactionMap.get(transaction).getWorkspace();
+        if (!hasDecided(transaction)) {
+            Workspace workspace = transactionMap.get(transaction).getWorkspace();
 
-        for(Map.Entry<Integer, WorkspaceResource> entry : workspace.entrySet()) {
-            Integer version = entry.getValue().getVersion();
-            Integer key = entry.getKey();
-            if(version != database.get(key).getVersion() || pendingResource.containsKey(key)) {
-                return false;
+            for (Map.Entry<Integer, WorkspaceResource> entry : workspace.entrySet()) {
+                Integer version = entry.getValue().getVersion();
+                Integer key = entry.getKey();
+                if (version != database.get(key).getVersion() || pendingResource.containsKey(key)) {
+                    return false;
+                }
             }
+            return true;
+        } else { // server has already decided to abort
+            return false;
         }
-        return true;
     }
 
 
 
     private void freeWorkspace(Transaction transaction){
-        unsetTimeout(transaction);
+        unsetTimeout(transactionMap.get(transaction));
         freePendingResources(transaction);
         transactionMap.remove(transaction);
+        pendingTransactions.remove(transaction);
 //        transaction2coordinator.remove(transaction);
     }
 
@@ -125,6 +131,7 @@ public class Server extends Node {
     public void onVoteRequest(CoordinatorServerMessage.VoteRequest msg) {
         Transaction transaction = msg.transaction;
         CoordinatorServerMessage.Vote vote = null;
+
         //if (id==2) {crash(5000); return;}    // simulate a crash
         //if (id==2) delay(4000);              // simulate a delay
         if(!canCommit(transaction)){
@@ -133,6 +140,7 @@ public class Server extends Node {
         } else {
             lockResources(transaction);
             transactionMap.get(msg.transaction).setState(Transaction.State.READY);
+            transactionMap.get(msg.transaction).setServers(msg.servers);
             vote = CoordinatorServerMessage.Vote.YES;
         }
         if(Main.SERVER_DEBUG_SEND_VOTE)
@@ -145,10 +153,16 @@ public class Server extends Node {
 //        System.out.println("ASDASDADSDADSADA");
         if (!hasDecided(msg.transaction)) {
             System.out.println("Server " + id + " timeout for transaction from client " + msg.transaction.getClientId());
-            if (transactionMap.get(msg.transaction).getState() == Transaction.State.INIT)
+            ServerTransaction t = transactionMap.get(msg.transaction);
+            assert t.getState() != Transaction.State.DECIDED;
+            if (t.getState() == Transaction.State.INIT) // this should never happen
                 fixDecision(msg.transaction, CoordinatorServerMessage.Decision.ABORT);
             else {
-                // TODO if voted commit do termination protocol
+                // if voted commit do termination protocol:
+                // ask decision to coordinator and fellow servers
+                List<ActorRef> dest = new ArrayList<>(t.getServers());
+                dest.add(t.getCoordinator());
+                multicast(new CoordinatorServerMessage.DecisionRequest(t), dest, true);
             }
         }
         //        if (!hasDecided()) {
@@ -161,7 +175,15 @@ public class Server extends Node {
 
     @Override
     public void onRecoveryMsg(CoordinatorServerMessage.RecoveryMsg msg) {
+        getContext().become(createReceive());
 
+        for (Transaction t : new HashSet<>(pendingTransactions)) {
+            if (transactionMap.get(t).getState() == Transaction.State.INIT)
+                fixDecision(t, CoordinatorServerMessage.Decision.ABORT);
+            else { // it is in READY
+                // TODO termination protocol
+            }
+        }
 //        getContext().become(createReceive());
 //
 //        // We don't handle explicitly the "not voted" case here
@@ -199,6 +221,7 @@ public class Server extends Node {
         if (!hasDecided(transaction) && transactionMap.containsKey(transaction)) {
             transaction2decision.put(transaction, d);
             transactionMap.get(transaction).setState(Transaction.State.DECIDED);
+
             if(Main.SERVER_DEBUG_DECIDED)
                 print(" Server decided " + d);
             if(d == CoordinatorServerMessage.Decision.COMMIT){
@@ -222,6 +245,7 @@ public class Server extends Node {
             Integer clientAttemptedTxn = msg.transaction.getNumAttemptedTxn();
             ServerTransaction transaction = new ServerTransaction(clientId, clientAttemptedTxn, getSender());
             transactionMap.put(msg.transaction, transaction);
+            pendingTransactions.add(transaction);
         }
 
         ServerTransaction transaction = transactionMap.get(msg.transaction);
@@ -234,16 +258,17 @@ public class Server extends Node {
     }
 
     public void onTransactionRead(CoordinatorServerMessage.TransactionRead msg) {
-        int valueRead = processWorkspace(msg).getValue();
-        reply(new CoordinatorServerMessage.TxnReadResponseMsg(msg.transaction, msg.key, valueRead));
+        if (!maybeCrash(CrashBefore2PC.ON_COORD_MSG)) {
+            int valueRead = processWorkspace(msg).getValue();
+            reply(new CoordinatorServerMessage.TxnReadResponseMsg(msg.transaction, msg.key, valueRead));
+        }
     }
-
 
     public void onTransactionWrite(CoordinatorServerMessage.TransactionWrite msg) {
         WorkspaceResource resource = processWorkspace(msg);
         resource.setValue(msg.value);
         resource.setChanged(true);
-//        getSender().tell(new CoordinatorServerMessages.TransactionReadResponse(valueRead), getSelf());
+        maybeCrash(CrashBefore2PC.ON_COORD_MSG);
     }
 
     @Override

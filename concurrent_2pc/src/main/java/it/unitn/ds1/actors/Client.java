@@ -90,7 +90,7 @@ public class Client extends AbstractActor {
     // end the current TXN sending TxnEndMsg to the coordinator
     void endTxn() {
         boolean doCommit = r.nextDouble() < COMMIT_PROBABILITY;
-        currentCoordinator.tell(new ClientCoordinatorMessage.TxnEndMsg(clientId, doCommit), getSelf());
+        currentCoordinator.tell(new ClientCoordinatorMessage.TxnEndMsg(clientId, numAttemptedTxn, doCommit), getSelf());
         operationTimeout = setTimeout(new TimeoutMessages.Client.TxnOperationMsg());
 
         firstValue = null;
@@ -107,8 +107,8 @@ public class Client extends AbstractActor {
         secondKey = (firstKey + randKeyOffset) % (maxKey + 1);
 
         // READ requests
-        currentCoordinator.tell(new ClientCoordinatorMessage.ReadMsg(clientId, firstKey), getSelf());
-        currentCoordinator.tell(new ClientCoordinatorMessage.ReadMsg(clientId, secondKey), getSelf());
+        currentCoordinator.tell(new ClientCoordinatorMessage.ReadMsg(clientId, numAttemptedTxn, firstKey), getSelf());
+        currentCoordinator.tell(new ClientCoordinatorMessage.ReadMsg(clientId, numAttemptedTxn, secondKey), getSelf());
 
         operationTimeout = setTimeout(new TimeoutMessages.Client.TxnOperationMsg());
         // delete the current read values
@@ -124,8 +124,8 @@ public class Client extends AbstractActor {
         // take some amount from one value and pass it to the other, then request writes
         Integer amountTaken = 0;
         if(firstValue >= 1) amountTaken = 1 + r.nextInt(firstValue);
-        currentCoordinator.tell(new ClientCoordinatorMessage.WriteMsg(clientId, firstKey, firstValue - amountTaken), getSelf());
-        currentCoordinator.tell(new ClientCoordinatorMessage.WriteMsg(clientId, secondKey, secondValue + amountTaken), getSelf());
+        currentCoordinator.tell(new ClientCoordinatorMessage.WriteMsg(clientId, numAttemptedTxn, firstKey, firstValue - amountTaken), getSelf());
+        currentCoordinator.tell(new ClientCoordinatorMessage.WriteMsg(clientId, numAttemptedTxn, secondKey, secondValue + amountTaken), getSelf());
 
         if(Main.CLIENT_DEBUG_WRITE_TXN)
             System.out.println("CLIENT " + clientId + " WRITE #"+ numOpDone

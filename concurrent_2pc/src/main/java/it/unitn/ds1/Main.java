@@ -39,6 +39,7 @@ public class Main {
 
     public final static int MAX_RECOVERY_TIME = 5000;      // timeout for the votes, ms
     public final static int TIMEOUT = 500;  // timeout for the decision, ms
+    public final static int MIN_RECOVERY_TIME = 1;
 
     /*-- Main ------------------------------------------------------------------*/
     public static void main(String[] args) {
@@ -58,14 +59,19 @@ public class Main {
         coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.BEFORE_TXN_ACCEPT_MSG);
         coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.ON_CLIENT_MSG);
         coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.ON_SERVER_MSG);
+
+
+
         for (int i = 0; i < N_COORDINATORS; i++)
             coordinators.add(system.actorOf(Coordinator.props(i, coordinatorCrashPhases), "coordinator" + i));
         System.out.println("Coordinators created");
 
         // Create the servers
+        Set<Node.CrashPhase> serverCrashPhases = new HashSet<>();
+        serverCrashPhases.add(Server.CrashBefore2PC.ON_COORD_MSG);
         List<ActorRef> servers = new ArrayList<>();
         for (int i = 0; i < N_SERVER; i++)
-            servers.add(system.actorOf(Server.props(i, new HashSet<>()), "server" + i));
+            servers.add(system.actorOf(Server.props(i, serverCrashPhases), "server" + i));
         System.out.println("Servers created");
 
         // Create the checker

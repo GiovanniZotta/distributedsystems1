@@ -44,7 +44,7 @@ public class Coordinator extends Node {
     // here all the nodes that sent YES are collected
     private final Map<ActorRef, CoordinatorTransaction> client2transaction = new HashMap<>();
     private final Map<Transaction, ActorRef> transaction2client = new HashMap<>();
-    private final Set<Transaction> pendingTransactions = new HashSet<>();
+
 
     boolean allVotedYes(CoordinatorTransaction transaction) { // returns true if all voted YES
         return transaction.getYesVoters().size() == transaction.getServers().size();
@@ -124,8 +124,8 @@ public class Coordinator extends Node {
             assert(client != null);
             sendMessage(client,
                     new ClientCoordinatorMessage.TxnResultMsg(
-                            d == CoordinatorServerMessage.Decision.COMMIT,
-                            transaction.getNumAttemptedTxn()));
+                            transaction.getClientId(), transaction.getNumAttemptedTxn(),
+                            d == CoordinatorServerMessage.Decision.COMMIT));
             pendingTransactions.remove(transaction);
             client2transaction.remove(client);
             transaction2client.remove(transaction);
@@ -147,11 +147,14 @@ public class Coordinator extends Node {
             // so do not care about other votes
             return;
         }
+
         CoordinatorTransaction transaction = getCTfromTransaction(msg.transaction);
         CoordinatorServerMessage.Vote v = (msg).vote;
+        print("Received vote");
         if (v == CoordinatorServerMessage.Vote.YES) {
             transaction.getYesVoters().add(getSender());
             if (allVotedYes(transaction)) {
+                print("All voted yes");
                 takeDecision(transaction, CoordinatorServerMessage.Decision.COMMIT);
                 //if (id==-1) {crash(3000); return;}
 //                multicastAndCrash(new CoordinatorServerMessages.DecisionResponse(transaction2decision.get(transaction)), 3000);
@@ -163,7 +166,13 @@ public class Coordinator extends Node {
     }
 
     public void onTimeoutMsg(CoordinatorServerMessage.TimeoutMsg msg) {
-        unsetTimeout(msg.transaction);
+        CoordinatorTransaction t = getCTfromTransaction(msg.transaction);
+        unsetTimeout(t);
+
+        // if in INIT -> server crashed before 2PC
+        // if in READY -> at least one server did not respond to the vote request (and nobody voted abort)
+        assert t.getState() != Transaction.State.DECIDED;
+        takeDecision(t, CoordinatorServerMessage.Decision.ABORT);
 //        if (!hasDecided(tra)) {
 //            print("Timeout");
 //
@@ -187,29 +196,38 @@ public class Coordinator extends Node {
     public void onTxnBeginMsg(ClientCoordinatorMessage.TxnBeginMsg msg) {
         // initialize transaction
         // TODO: check if the client is already in the map
-        CoordinatorTransaction t = new CoordinatorTransaction(msg.clientId, msg.numAttemptedTxn, getSender());
+        CoordinatorTransaction t = client2transaction.get(getSender());
+        if (t != null) {
+            takeDecision(t, CoordinatorServerMessage.Decision.ABORT);
+        }
+        t = new CoordinatorTransaction(msg.clientId, msg.numAttemptedTxn, getSender());
         client2transaction.put(getSender(), t);
         transaction2client.put(t, getSender());
         pendingTransactions.add(t);
+        print("Starting transaction from " + t.getClientId());
         // send accept
         if (!maybeCrash(CrashBefore2PC.BEFORE_TXN_ACCEPT_MSG))
-            getSender().tell(new ClientCoordinatorMessage.TxnAcceptMsg(), getSelf());
+            reply(new ClientCoordinatorMessage.TxnAcceptMsg(msg.clientId, msg.numAttemptedTxn));
     }
 
     private void takeDecision(Transaction transaction, CoordinatorServerMessage.Decision decision){
-        unsetTimeout(transaction);
+        print("Taking decision for transaction " + transaction.getTxnId());
         CoordinatorTransaction transaction1 = getCTfromTransaction(transaction);
+        unsetTimeout(transaction1);
         fixDecision(transaction1, decision);
         multicast(new CoordinatorServerMessage.DecisionResponse(transaction1, transaction2decision.get(transaction1)), transaction1.getServers());
     }
 
     public void onTxnEndMsg(ClientCoordinatorMessage.TxnEndMsg msg) {
         CoordinatorTransaction transaction = client2transaction.get(getSender());
-        if(msg.commit){
-            multicast(new CoordinatorServerMessage.VoteRequest(transaction), transaction.getServers());
-            transaction.setState(Transaction.State.READY);
-        } else {
-            takeDecision(transaction, CoordinatorServerMessage.Decision.ABORT);
+        if (isCurrentTransaction(transaction, msg)) {
+            if (msg.commit) {
+                print("sending vote request");
+                multicast(new CoordinatorServerMessage.VoteRequest(transaction, transaction.getServers()), transaction.getServers(), true);
+                transaction.setState(Transaction.State.READY);
+            } else {
+                takeDecision(transaction, CoordinatorServerMessage.Decision.ABORT);
+            }
         }
 //        print("Sending vote requests");
 //        multicast(new CoordinatorServerMessages.VoteRequest());
@@ -224,32 +242,44 @@ public class Coordinator extends Node {
     }
 
     public void onReadMsg (ClientCoordinatorMessage.ReadMsg msg) {
-        int key = msg.key;
-        int serverId = key / Server.DB_SIZE;
         CoordinatorTransaction transaction = client2transaction.get(getSender());
-        if (!trackServerForTxn(transaction, serverId))
-            sendMessage(servers.get(serverId), new CoordinatorServerMessage.TransactionRead(transaction, key), true);
+        if (isCurrentTransaction(transaction, msg)) {
+            int key = msg.key;
+            int serverId = key / Server.DB_SIZE;
+            if (!trackServerForTxn(transaction, serverId))
+                sendMessage(servers.get(serverId), new CoordinatorServerMessage.TransactionRead(transaction, key), true);
+        }
     }
 
     public void onTxnReadResponseMsg(CoordinatorServerMessage.TxnReadResponseMsg msg) {
-        unsetTimeout(msg.transaction);
+        unsetTimeout(getCTfromTransaction(msg.transaction));
         ActorRef c = transaction2client.get(msg.transaction);
         if (!maybeCrash(CrashBefore2PC.ON_SERVER_MSG))
-            c.tell(new ClientCoordinatorMessage.ReadResultMsg(msg.key, msg.valueRead), getSelf());
+            sendMessage(c, new ClientCoordinatorMessage.ReadResultMsg(
+                    msg.transaction.getClientId(),
+                    msg.transaction.getNumAttemptedTxn(),
+                    msg.key,
+                    msg.valueRead));
     }
 
     public void onWriteMsg (ClientCoordinatorMessage.WriteMsg msg) {
-        int key = msg.key;
-        int value = msg.value;
-        int serverId = key / Server.DB_SIZE;
         CoordinatorTransaction transaction = client2transaction.get(getSender());
-        if (!trackServerForTxn(transaction, serverId))
-            sendMessage(servers.get(serverId), new CoordinatorServerMessage.TransactionWrite(transaction, key, value), true);
+        if (isCurrentTransaction(transaction, msg)) {
+            int key = msg.key;
+            int value = msg.value;
+            int serverId = key / Server.DB_SIZE;
+            if (!trackServerForTxn(transaction, serverId))
+                sendMessage(servers.get(serverId), new CoordinatorServerMessage.TransactionWrite(transaction, key, value));
+        }
+    }
+
+    private Boolean isCurrentTransaction(CoordinatorTransaction transaction, ClientCoordinatorMessage msg) {
+        return transaction != null && transaction.getNumAttemptedTxn() == msg.numAttemptedTxn;
     }
 
     @Override
     public void onCheckCorrectness(Message.CheckCorrectness msg){
-        getSender().tell(new Message.CheckCorrectnessResponse(id, null, numCrashes), getSelf());
+        reply(new Message.CheckCorrectnessResponse(id, null, numCrashes));
     }
 
 }
