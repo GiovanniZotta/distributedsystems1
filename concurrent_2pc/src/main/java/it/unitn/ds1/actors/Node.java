@@ -116,21 +116,15 @@ public abstract class Node extends AbstractActor {
     }
     void multicast(CoordinatorServerMessage m, Collection<ActorRef> group, Boolean setTimeout) {
         for (ActorRef p : group)
-            sendMessage(p, m, setTimeout);
+            sendMessage(p, m);
+        if (setTimeout)
+            setTimeout(Main.TIMEOUT, m.transaction);
     }
 
     // a multicast implementation that crashes after sending the first message
     abstract void multicastAndCrash(Serializable m, int recoverIn);
 
-    // schedule a Timeout message in specified time
-    void setTimeout(int time, Transaction transaction) {
-        transaction.setTimeout(getContext().system().scheduler().scheduleOnce(
-                Duration.create(time, TimeUnit.MILLISECONDS),
-                getSelf(),
-                new CoordinatorServerMessage.TimeoutMsg(transaction), // the message to send
-                getContext().system().dispatcher(), getSelf()
-        ));
-    }
+
 
     boolean hasDecided(Transaction transaction) {
         return transaction2decision.get(transaction) != null;
@@ -191,7 +185,18 @@ public abstract class Node extends AbstractActor {
         sendMessage(getSender(), msg);
     }
 
+    // schedule a Timeout message in specified time
+    void setTimeout(int time, Transaction transaction) {
+        print("Set timeout for transaction " + transaction.getTxnId());
+        transaction.setTimeout(getContext().system().scheduler().scheduleOnce(
+                Duration.create(time, TimeUnit.MILLISECONDS),
+                getSelf(),
+                new CoordinatorServerMessage.TimeoutMsg(transaction), // the message to send
+                getContext().system().dispatcher(), getSelf()
+        ));
+    }
     protected void unsetTimeout(Transaction transaction) {
+        print("Unset timeout for transaction " + transaction.getTxnId());
         if (transaction.getTimeout() != null)
             transaction.getTimeout().cancel();
         transaction.setTimeout(null);

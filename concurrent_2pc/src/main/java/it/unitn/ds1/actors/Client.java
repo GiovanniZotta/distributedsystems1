@@ -151,7 +151,7 @@ public class Client extends AbstractActor {
 
     private void onTxnAcceptMsg(ClientCoordinatorMessage.TxnAcceptMsg msg) {
         acceptedTxn = true;
-        acceptTimeout.cancel();
+        unsetTimeout();
         readTwo();
     }
 
@@ -166,7 +166,7 @@ public class Client extends AbstractActor {
         if(msg.key.equals(secondKey)) secondValue = msg.value;
 
         boolean opDone = (firstValue != null && secondValue != null);
-        if (opDone) operationTimeout.cancel();
+        if (opDone) unsetTimeout();
 
         // do we only read or also write?
         double writeRandom = r.nextDouble();
@@ -183,9 +183,18 @@ public class Client extends AbstractActor {
         }
     }
 
+    private void unsetTimeout(){
+        if(operationTimeout != null)
+            operationTimeout.cancel();
+        if(acceptTimeout != null)
+            acceptTimeout.cancel();
+        acceptTimeout = null;
+        operationTimeout = null;
+    }
+
     private void onTxnResultMsg(ClientCoordinatorMessage.TxnResultMsg msg) throws InterruptedException {
         if (msg.numAttemptedTxn == numAttemptedTxn) {
-            operationTimeout.cancel();
+            unsetTimeout();
             if (msg.commit) {
                 numCommittedTxn++;
                 if (Main.CLIENT_DEBUG_COMMIT_OK)

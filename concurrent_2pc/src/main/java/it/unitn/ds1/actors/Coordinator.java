@@ -166,6 +166,7 @@ public class Coordinator extends Node {
     }
 
     public void onTimeoutMsg(CoordinatorServerMessage.TimeoutMsg msg) {
+        print("Timeout for transaction " + msg.transaction.getTxnId());
         CoordinatorTransaction t = getCTfromTransaction(msg.transaction);
         unsetTimeout(t);
 
@@ -281,5 +282,13 @@ public class Coordinator extends Node {
     public void onCheckCorrectness(Message.CheckCorrectness msg){
         reply(new Message.CheckCorrectnessResponse(id, null, numCrashes));
     }
+    @Override
+    void setTimeout(int time, Transaction transaction) {
+        super.setTimeout(time, getCTfromTransaction(transaction));
+    }
 
+    @Override
+    protected void unsetTimeout(Transaction transaction) {
+        super.unsetTimeout(getCTfromTransaction(transaction));
+    }
 }

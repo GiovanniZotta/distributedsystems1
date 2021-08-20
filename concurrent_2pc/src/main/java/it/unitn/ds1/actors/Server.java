@@ -106,7 +106,7 @@ public class Server extends Node {
     private void freeWorkspace(Transaction transaction){
         unsetTimeout(transactionMap.get(transaction));
         freePendingResources(transaction);
-        transactionMap.remove(transaction);
+//        transactionMap.remove(transaction);
         pendingTransactions.remove(transaction);
 //        transaction2coordinator.remove(transaction);
     }
@@ -280,4 +280,13 @@ public class Server extends Node {
         reply(new Message.CheckCorrectnessResponse(id, result, numCrashes));
     }
 
+    @Override
+    void setTimeout(int time, Transaction transaction) {
+        super.setTimeout(time, transactionMap.get(transaction));
+    }
+
+    @Override
+    protected void unsetTimeout(Transaction transaction) {
+        super.unsetTimeout(transactionMap.get(transaction));
+    }
 }
