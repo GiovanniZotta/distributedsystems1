@@ -4,6 +4,7 @@ package it.unitn.ds1.actors;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
+import akka.actor.Cancellable;
 import it.unitn.ds1.Main;
 import it.unitn.ds1.transactions.Transaction;
 import it.unitn.ds1.messages.CoordinatorServerMessage;
@@ -111,16 +112,6 @@ public abstract class Node extends AbstractActor {
         }
     }
 
-    void multicast(CoordinatorServerMessage m, Collection<ActorRef> group) {
-        multicast(m, group, false);
-    }
-    void multicast(CoordinatorServerMessage m, Collection<ActorRef> group, Boolean setTimeout) {
-        for (ActorRef p : group)
-            sendMessage(p, m);
-        if (setTimeout)
-            setTimeout(Main.TIMEOUT, m.transaction);
-    }
-
     // a multicast implementation that crashes after sending the first message
     abstract void multicastAndCrash(Serializable m, int recoverIn);
 
@@ -167,39 +158,23 @@ public abstract class Node extends AbstractActor {
 
     public abstract void onCheckCorrectness(Message.CheckCorrectness msg);
 
-    protected void sendMessage(ActorRef to, CoordinatorServerMessage msg, Boolean setTimeout) {
-        to.tell(msg, getSelf());
-        if (setTimeout)
-            setTimeout(Main.TIMEOUT, msg.transaction);
-    }
 
     protected void sendMessage(ActorRef to, Message msg) {
         to.tell(msg, getSelf());
-    }
-
-    protected void reply(CoordinatorServerMessage msg, Boolean setTimeout) {
-        sendMessage(getSender(), msg, setTimeout);
     }
 
     protected void reply(Message msg) {
         sendMessage(getSender(), msg);
     }
 
-    // schedule a Timeout message in specified time
-    void setTimeout(int time, Transaction transaction) {
-        print("Set timeout for transaction " + transaction.getTxnId());
-        transaction.setTimeout(getContext().system().scheduler().scheduleOnce(
+
+    protected Cancellable newTimeout(int time, Transaction transaction) {
+        return getContext().system().scheduler().scheduleOnce(
                 Duration.create(time, TimeUnit.MILLISECONDS),
                 getSelf(),
                 new CoordinatorServerMessage.TimeoutMsg(transaction), // the message to send
                 getContext().system().dispatcher(), getSelf()
-        ));
-    }
-    protected void unsetTimeout(Transaction transaction) {
-        print("Unset timeout for transaction " + transaction.getTxnId());
-        if (transaction.getTimeout() != null)
-            transaction.getTimeout().cancel();
-        transaction.setTimeout(null);
+        );
     }
 
 }

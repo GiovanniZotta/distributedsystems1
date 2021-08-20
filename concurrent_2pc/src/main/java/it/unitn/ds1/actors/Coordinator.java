@@ -3,6 +3,7 @@ package it.unitn.ds1.actors;
 /*-- Coordinator -----------------------------------------------------------*/
 
 import akka.actor.ActorRef;
+import akka.actor.Cancellable;
 import akka.actor.Props;
 import it.unitn.ds1.Main;
 import it.unitn.ds1.transactions.CoordinatorTransaction;
@@ -16,26 +17,33 @@ import java.util.*;
 
 public class Coordinator extends Node {
 
-    public enum CrashBefore2PC implements CrashPhase {BEFORE_TXN_ACCEPT_MSG, ON_CLIENT_MSG, ON_SERVER_MSG;
+    public enum CrashBefore2PC implements CrashPhase {
+        BEFORE_TXN_ACCEPT_MSG, ON_CLIENT_MSG, ON_SERVER_MSG;
+
         public String toString() {
             return "CoordinatorCrashBefore2PC_" + name();
         }
     }
+
     public static class CrashDuring2PC {
         public enum CrashDuringVote {
             ZERO_MSG, RND_MSG, ALL_MSG;
+
             @Override
             public String toString() {
                 return CrashDuring2PC.name() + "_CrashDuringVote_" + name();
             }
         }
+
         public enum CrashDuringDecision {
             ZERO_MSG, RND_MSG, ALL_MSG;
+
             @Override
             public String toString() {
                 return CrashDuring2PC.name() + "_CrashDuringDecision_" + name();
             }
         }
+
         public static String name() {
             return "CoordinatorCrashDuring2PC";
         }
@@ -54,7 +62,7 @@ public class Coordinator extends Node {
         super(id, crashPhases);
     }
 
-    static public Props props(int id,  Set<CrashPhase> crashPhases) {
+    static public Props props(int id, Set<CrashPhase> crashPhases) {
         return Props.create(Coordinator.class, () -> new Coordinator(id, crashPhases));
     }
 
@@ -76,7 +84,7 @@ public class Coordinator extends Node {
                 .build();
     }
 
-    void multicastAndCrash(Serializable m, int recoverIn){
+    void multicastAndCrash(Serializable m, int recoverIn) {
 //        Integer crashAfter = 0;
 //        switch(phase){
 //            case ZERO_MESSAGES:
@@ -121,7 +129,7 @@ public class Coordinator extends Node {
             transaction2decision.put(transaction, d);
             transaction.setState(Transaction.State.DECIDED);
             ActorRef client = transaction2client.get(transaction);
-            assert(client != null);
+            assert (client != null);
             sendMessage(client,
                     new ClientCoordinatorMessage.TxnResultMsg(
                             transaction.getClientId(), transaction.getNumAttemptedTxn(),
@@ -130,13 +138,13 @@ public class Coordinator extends Node {
             client2transaction.remove(client);
             transaction2client.remove(transaction);
             // TODO: remove client from map
-            if(Main.COORD_DEBUG_DECISION)
+            if (Main.COORD_DEBUG_DECISION)
                 print("Coordinator " + this.id + " decided " + d
-                + " on transaction " + transaction.getTxnId());
+                        + " on transaction " + transaction.getTxnId());
         }
     }
 
-    private CoordinatorTransaction getCTfromTransaction(Transaction transaction){
+    private CoordinatorTransaction getCTfromTransaction(Transaction transaction) {
         ActorRef c = transaction2client.get(transaction);
         return client2transaction.get(c);
     }
@@ -168,6 +176,8 @@ public class Coordinator extends Node {
     public void onTimeoutMsg(CoordinatorServerMessage.TimeoutMsg msg) {
         print("Timeout for transaction " + msg.transaction.getTxnId());
         CoordinatorTransaction t = getCTfromTransaction(msg.transaction);
+        if (t == null)
+            return;
         unsetTimeout(t);
 
         // if in INIT -> server crashed before 2PC
@@ -211,13 +221,14 @@ public class Coordinator extends Node {
             reply(new ClientCoordinatorMessage.TxnAcceptMsg(msg.clientId, msg.numAttemptedTxn));
     }
 
-    private void takeDecision(Transaction transaction, CoordinatorServerMessage.Decision decision){
+    private void takeDecision(Transaction transaction, CoordinatorServerMessage.Decision decision) {
         print("Taking decision for transaction " + transaction.getTxnId());
         CoordinatorTransaction transaction1 = getCTfromTransaction(transaction);
         unsetTimeout(transaction1);
         fixDecision(transaction1, decision);
-        multicast(new CoordinatorServerMessage.DecisionResponse(transaction1, transaction2decision.get(transaction1)), transaction1.getServers());
+        multicast(new CoordinatorServerMessage.DecisionResponse(transaction1, transaction2decision.get(transaction1)), transaction1.getServers(), false);
     }
+
 
     public void onTxnEndMsg(ClientCoordinatorMessage.TxnEndMsg msg) {
         CoordinatorTransaction transaction = client2transaction.get(getSender());
@@ -242,7 +253,7 @@ public class Coordinator extends Node {
         return maybeCrash(CrashBefore2PC.ON_CLIENT_MSG);
     }
 
-    public void onReadMsg (ClientCoordinatorMessage.ReadMsg msg) {
+    public void onReadMsg(ClientCoordinatorMessage.ReadMsg msg) {
         CoordinatorTransaction transaction = client2transaction.get(getSender());
         if (isCurrentTransaction(transaction, msg)) {
             int key = msg.key;
@@ -253,7 +264,7 @@ public class Coordinator extends Node {
     }
 
     public void onTxnReadResponseMsg(CoordinatorServerMessage.TxnReadResponseMsg msg) {
-        unsetTimeout(getCTfromTransaction(msg.transaction));
+        unsetTimeout(msg.transaction, getSender());
         ActorRef c = transaction2client.get(msg.transaction);
         if (!maybeCrash(CrashBefore2PC.ON_SERVER_MSG))
             sendMessage(c, new ClientCoordinatorMessage.ReadResultMsg(
@@ -263,7 +274,7 @@ public class Coordinator extends Node {
                     msg.valueRead));
     }
 
-    public void onWriteMsg (ClientCoordinatorMessage.WriteMsg msg) {
+    public void onWriteMsg(ClientCoordinatorMessage.WriteMsg msg) {
         CoordinatorTransaction transaction = client2transaction.get(getSender());
         if (isCurrentTransaction(transaction, msg)) {
             int key = msg.key;
@@ -279,16 +290,52 @@ public class Coordinator extends Node {
     }
 
     @Override
-    public void onCheckCorrectness(Message.CheckCorrectness msg){
+    public void onCheckCorrectness(Message.CheckCorrectness msg) {
         reply(new Message.CheckCorrectnessResponse(id, null, numCrashes));
     }
-    @Override
-    void setTimeout(int time, Transaction transaction) {
-        super.setTimeout(time, getCTfromTransaction(transaction));
+
+    void setTimeout(int time, Transaction transaction, ActorRef server) {
+        print("Set timeout for transaction " + transaction.getTxnId() + " for server " + servers.indexOf(server));
+        CoordinatorTransaction t = getCTfromTransaction(transaction);
+        t.pushServerTimeout(server, newTimeout(time, t));
     }
 
-    @Override
-    protected void unsetTimeout(Transaction transaction) {
-        super.unsetTimeout(getCTfromTransaction(transaction));
+    protected void unsetTimeout(Transaction transaction, ActorRef server) {
+        CoordinatorTransaction t = getCTfromTransaction(transaction);
+        if (t != null && t.hasTimeout(server)) {
+            Cancellable to = t.popOldestServerTimeout(server);
+            if (!to.isCancelled()) {
+                if (!to.cancel()) {
+//                    print("ERRORE FORTISSIMO!!!!");
+//                    throw new NullPointerException();
+//                    to.
+                } else {
+                    print("Unset timeout for transaction " + transaction.getTxnId() + " for server " + servers.indexOf(server));
+                }
+            }
+        }
+    }
+
+    private void unsetTimeout(Transaction transaction) {
+
+        CoordinatorTransaction t = getCTfromTransaction(transaction);
+        if (t == null) return;
+        for (ActorRef s : t.getServers()) {
+            while (t.hasTimeout(s))
+              unsetTimeout(t, s);
+        }
+    }
+
+
+    protected void sendMessage(ActorRef to, CoordinatorServerMessage msg, Boolean setTimeout) {
+        super.sendMessage(to, msg);
+        if (setTimeout)
+            setTimeout(Main.TIMEOUT, msg.transaction, to);
+    }
+
+    void multicast(CoordinatorServerMessage m, Collection<ActorRef> group, Boolean setTimeout) {
+        for (ActorRef p : group) {
+            sendMessage(p, m, setTimeout);
+        }
     }
 }

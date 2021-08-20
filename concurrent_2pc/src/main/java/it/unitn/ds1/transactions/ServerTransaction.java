@@ -1,6 +1,7 @@
 package it.unitn.ds1.transactions;
 
 import akka.actor.ActorRef;
+import akka.actor.Cancellable;
 
 import java.util.List;
 
@@ -9,6 +10,7 @@ public class ServerTransaction extends Transaction {
     private final Workspace workspace;
     private ActorRef coordinator;
     private List<ActorRef> servers;
+    private Cancellable timeout;
 
     public ServerTransaction(Integer clientId, Integer numAttemptedTxn, ActorRef coordinator) {
         super(clientId, numAttemptedTxn);
@@ -35,5 +37,13 @@ public class ServerTransaction extends Transaction {
 
     public void setServers(List<ActorRef> servers) {
         this.servers = servers;
+    }
+
+    public Cancellable getTimeout() {
+        return timeout;
+    }
+
+    public void setTimeout(Cancellable timeout) {
+        this.timeout = timeout;
     }
 }

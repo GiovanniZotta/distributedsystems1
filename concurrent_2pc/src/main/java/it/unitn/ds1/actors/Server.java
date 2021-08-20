@@ -280,13 +280,36 @@ public class Server extends Node {
         reply(new Message.CheckCorrectnessResponse(id, result, numCrashes));
     }
 
-    @Override
+
+    // schedule a Timeout message in specified time
     void setTimeout(int time, Transaction transaction) {
-        super.setTimeout(time, transactionMap.get(transaction));
+        print("Set timeout for transaction " + transaction.getTxnId());
+        ServerTransaction t = transactionMap.get(transaction);
+        t.setTimeout(newTimeout(time, t));
     }
 
-    @Override
     protected void unsetTimeout(Transaction transaction) {
-        super.unsetTimeout(transactionMap.get(transaction));
+        ServerTransaction t = transactionMap.get(transaction);
+        print("Unset timeout for transaction " + t.getTxnId());
+        if (t.getTimeout() != null)
+            t.getTimeout().cancel();
+        t.setTimeout(null);
+    }
+
+    protected void sendMessage(ActorRef to, CoordinatorServerMessage msg, Boolean setTimeout) {
+        super.sendMessage(to, msg);
+        if (setTimeout)
+            setTimeout(Main.TIMEOUT, msg.transaction);
+    }
+
+    protected void reply(CoordinatorServerMessage msg, Boolean setTimeout) {
+        sendMessage(getSender(), msg, setTimeout);
+    }
+
+    void multicast(CoordinatorServerMessage m, Collection<ActorRef> group, Boolean setTimeout) {
+        for (ActorRef p : group)
+            sendMessage(p, m);
+        if (setTimeout)
+            setTimeout(Main.TIMEOUT, m.transaction);
     }
 }

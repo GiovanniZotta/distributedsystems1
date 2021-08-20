@@ -12,7 +12,6 @@ public class Transaction implements Cloneable {
 
     private Map.Entry<Integer, Integer> txnId;
     private State state;
-    private Cancellable timeout;
 
     public Transaction(Integer clientId, Integer numAttemptedTxn) {
         this.txnId = new AbstractMap.SimpleEntry<>(clientId, numAttemptedTxn);
@@ -58,11 +57,4 @@ public class Transaction implements Cloneable {
         this.state = state;
     }
 
-    public Cancellable getTimeout() {
-        return timeout;
-    }
-
-    public void setTimeout(Cancellable timeout) {
-        this.timeout = timeout;
-    }
 }
