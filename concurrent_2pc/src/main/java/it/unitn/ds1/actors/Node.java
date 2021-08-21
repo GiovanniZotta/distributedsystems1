@@ -14,6 +14,7 @@ import scala.concurrent.duration.Duration;
 import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public abstract class Node extends AbstractActor {
     public interface CrashPhase {}
@@ -29,11 +30,11 @@ public abstract class Node extends AbstractActor {
 
         @Override
         public String toString() {
-            String res = "";
+            StringBuilder res = new StringBuilder();
             for (Entry<CrashPhase, Integer> entry : this.entrySet()){
-                res += entry.getKey().toString() + ": " + entry.getValue() + "\n";
+                res.append(entry.getKey().toString()).append(": ").append(entry.getValue()).append("\n");
             }
-            return res;
+            return res.toString();
         }
 
         public static CrashPhaseMap sumMaps(Collection<CrashPhaseMap> maps) {
@@ -45,7 +46,7 @@ public abstract class Node extends AbstractActor {
         }
     }
 
-    protected static final double CRASH_PROBABILITY = 0.001;
+    protected static final double CRASH_PROBABILITY = 0.0001;
     protected int id;                           // node ID
     protected List<ActorRef> servers;      // list of participant nodes
     protected ActorRef checker;
@@ -177,4 +178,50 @@ public abstract class Node extends AbstractActor {
         );
     }
 
+    private List<CrashPhase> buildCrashPhases(Class c){
+        return crashPhases
+                .stream()
+                .filter(crashPhase -> crashPhase.getClass().equals(c))
+                .collect(Collectors.toList());
+    }
+
+    CrashPhase getZeroMsgCrashPhase(Class crashPhaseClass){
+        if (Coordinator.CrashDuring2PC.CrashDuringVote.class.equals(crashPhaseClass)) {
+            return Coordinator.CrashDuring2PC.CrashDuringVote.ZERO_MSG;
+        } else if (Coordinator.CrashDuring2PC.CrashDuringDecision.class.equals(crashPhaseClass)) {
+            return Coordinator.CrashDuring2PC.CrashDuringDecision.ZERO_MSG;
+        } else if (Server.CrashDuring2PC.CrashDuringVote.class.equals(crashPhaseClass)) {
+            return Server.CrashDuring2PC.CrashDuringVote.NO_VOTE;
+        } else if (Server.CrashDuring2PC.CrashDuringTermination.class.equals(crashPhaseClass)) {
+            return Server.CrashDuring2PC.CrashDuringTermination.NO_REPLY;
+        } else {
+            return null;
+        }
+    }
+
+    CrashPhase getAllMsgCrashPhase(Class crashPhaseClass){
+        if (Coordinator.CrashDuring2PC.CrashDuringVote.class.equals(crashPhaseClass)) {
+            return Coordinator.CrashDuring2PC.CrashDuringVote.ALL_MSG;
+        } else if (Coordinator.CrashDuring2PC.CrashDuringDecision.class.equals(crashPhaseClass)) {
+            return Coordinator.CrashDuring2PC.CrashDuringDecision.ALL_MSG;
+        } else if (Server.CrashDuring2PC.CrashDuringVote.class.equals(crashPhaseClass)) {
+            return Server.CrashDuring2PC.CrashDuringVote.AFTER_VOTE;
+        } else if (Server.CrashDuring2PC.CrashDuringTermination.class.equals(crashPhaseClass)) {
+            return Server.CrashDuring2PC.CrashDuringTermination.ALL_REPLY;
+        } else {
+            return null;
+        }
+    }
+
+    CrashPhase getRndMsgCrashPhase(Class crashPhaseClass){
+        if (Coordinator.CrashDuring2PC.CrashDuringVote.class.equals(crashPhaseClass)) {
+            return Coordinator.CrashDuring2PC.CrashDuringVote.RND_MSG;
+        } else if (Coordinator.CrashDuring2PC.CrashDuringDecision.class.equals(crashPhaseClass)) {
+            return Coordinator.CrashDuring2PC.CrashDuringDecision.RND_MSG;
+        } else if (Server.CrashDuring2PC.CrashDuringTermination.class.equals(crashPhaseClass)) {
+            return Server.CrashDuring2PC.CrashDuringTermination.RND_REPLY;
+        } else {
+            return null;
+        }
+    }
 }

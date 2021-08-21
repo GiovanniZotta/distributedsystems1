@@ -8,9 +8,9 @@ import java.util.AbstractMap;
 import java.util.Map;
 
 public class Transaction implements Cloneable {
-    public enum State {INIT, READY, DECIDED};
+    public enum State {INIT, READY, DECIDED}
 
-    private Map.Entry<Integer, Integer> txnId;
+    private final Map.Entry<Integer, Integer> txnId;
     private State state;
 
     public Transaction(Integer clientId, Integer numAttemptedTxn) {

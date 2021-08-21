@@ -22,24 +22,36 @@ public class Main {
     public final static Boolean CLIENT_DEBUG_READ_TXN = false;
     public final static Boolean CLIENT_DEBUG_WRITE_TXN = false;
     public final static Boolean CLIENT_DEBUG_READ_RESULT = false;
-    public final static Boolean CLIENT_DEBUG_COMMIT_OK = false;
+    public final static Boolean CLIENT_DEBUG_COMMIT_OK = true;
     public final static Boolean CLIENT_DEBUG_COMMIT_KO = false;
     public final static Boolean SERVER_DEBUG_SEND_VOTE = false;
     public final static Boolean SERVER_DEBUG_DECIDED = false;
-    public final static Boolean COORD_DEBUG_DECISION = false;
+    public final static Boolean COORD_DEBUG_DECISION = true;
     public final static Boolean NODE_DEBUG_STARTING_SIZE = false;
     public final static Boolean NODE_DEBUG_CRASH = true;
-    public final static Boolean DEBUG_MULT_CRASH_ZERO = false;
-    public final static Boolean DEBUG_MULT_CRASH_RANDOM = false;
-    public final static Boolean DEBUG_MULT_CRASH_ALL = false;
 
     /*-- Timeout debug ---------------------------------------------------------*/
-    public static final Boolean CLIENT_DEBUG_TIMEOUT_TXN_OPERATION = false;
-    public static final Boolean CLIENT_DEBUG_TIMEOUT_TXN_ACCEPT = false;
+    public static final Boolean CLIENT_DEBUG_TIMEOUT_TXN_OPERATION = true;
+    public static final Boolean CLIENT_DEBUG_TIMEOUT_TXN_ACCEPT = true;
 
     public final static int MAX_RECOVERY_TIME = 5000;      // timeout for the votes, ms
     public final static int TIMEOUT = 500;  // timeout for the decision, ms
+    public final static int CLIENT_TIMEOUT = 1000;  // timeout for the decision, ms
     public final static int MIN_RECOVERY_TIME = 1;
+    public static final boolean COORD_DEBUG_BEGIN_VOTE = false;
+    public static final boolean COORD_DEBUG_SET_TIMEOUT = false;
+    public static final boolean COORD_DEBUG_BEGIN_TXN = true;
+    public static final boolean COORD_DEBUG_TIMEOUT = false;
+    public static final boolean COORD_DEBUG_RECEIVED_VOTE = false;
+    public static final boolean DEBUG_COORD_ALL_VOTED_YES = false;
+    public static final boolean COORD_DEBUG_UNSET_TIMEOUT = false;
+    public static final boolean SERVER_DEBUG_SET_TIMEOUT = false;
+    public static final boolean SERVER_DEBUG_UNSET_TIMEOUT = false;
+    public static final boolean COORD_DEBUG_RECOVERY = true;
+    public static final boolean SERVER_DEBUG_RECOVERY = true;
+    public static final boolean SERVER_DEBUG_READ = false;
+    public static final boolean COORD_DEBUG_READ = false;
+    public static final boolean COORD_DEBUG_READ_RESPONSE = false;
 
     /*-- Main ------------------------------------------------------------------*/
     public static void main(String[] args) {
@@ -59,8 +71,12 @@ public class Main {
         coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.BEFORE_TXN_ACCEPT_MSG);
         coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.ON_CLIENT_MSG);
         coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.ON_SERVER_MSG);
-
-
+        coordinatorCrashPhases.add(Coordinator.CrashDuring2PC.CrashDuringVote.ALL_MSG);
+        coordinatorCrashPhases.add(Coordinator.CrashDuring2PC.CrashDuringVote.RND_MSG);
+        coordinatorCrashPhases.add(Coordinator.CrashDuring2PC.CrashDuringVote.ZERO_MSG);
+        coordinatorCrashPhases.add(Coordinator.CrashDuring2PC.CrashDuringDecision.ALL_MSG);
+        coordinatorCrashPhases.add(Coordinator.CrashDuring2PC.CrashDuringDecision.RND_MSG);
+        coordinatorCrashPhases.add(Coordinator.CrashDuring2PC.CrashDuringDecision.ZERO_MSG);
 
         for (int i = 0; i < N_COORDINATORS; i++)
             coordinators.add(system.actorOf(Coordinator.props(i, coordinatorCrashPhases), "coordinator" + i));
@@ -69,6 +85,12 @@ public class Main {
         // Create the servers
         Set<Node.CrashPhase> serverCrashPhases = new HashSet<>();
         serverCrashPhases.add(Server.CrashBefore2PC.ON_COORD_MSG);
+        serverCrashPhases.add(Server.CrashDuring2PC.CrashDuringVote.NO_VOTE);
+        serverCrashPhases.add(Server.CrashDuring2PC.CrashDuringVote.AFTER_VOTE);
+        serverCrashPhases.add(Server.CrashDuring2PC.CrashDuringTermination.ALL_REPLY);
+        serverCrashPhases.add(Server.CrashDuring2PC.CrashDuringTermination.RND_REPLY);
+        serverCrashPhases.add(Server.CrashDuring2PC.CrashDuringTermination.NO_REPLY);
+
         List<ActorRef> servers = new ArrayList<>();
         for (int i = 0; i < N_SERVER; i++)
             servers.add(system.actorOf(Server.props(i, serverCrashPhases), "server" + i));

@@ -149,8 +149,14 @@ public class Server extends Node {
 //        setTimeout(Main.DECISION_TIMEOUT);
     }
 
+    private void terminationProtocol(Transaction transaction){
+        ServerTransaction t = transactionMap.get(transaction);
+        List<ActorRef> dest = new ArrayList<>(t.getServers());
+        dest.add(t.getCoordinator());
+        multicast(new CoordinatorServerMessage.DecisionRequest(t), dest, true, CrashDuring2PC.CrashDuringTermination.class);
+    }
+
     public void onTimeout(CoordinatorServerMessage.TimeoutMsg msg) {
-//        System.out.println("ASDASDADSDADSADA");
         if (!hasDecided(msg.transaction)) {
             System.out.println("Server " + id + " timeout for transaction from client " + msg.transaction.getClientId());
             ServerTransaction t = transactionMap.get(msg.transaction);
@@ -160,9 +166,7 @@ public class Server extends Node {
             else {
                 // if voted commit do termination protocol:
                 // ask decision to coordinator and fellow servers
-                List<ActorRef> dest = new ArrayList<>(t.getServers());
-                dest.add(t.getCoordinator());
-                multicast(new CoordinatorServerMessage.DecisionRequest(t), dest, true);
+                terminationProtocol(t);
             }
         }
         //        if (!hasDecided()) {
@@ -182,7 +186,14 @@ public class Server extends Node {
                 fixDecision(t, CoordinatorServerMessage.Decision.ABORT);
             else { // it is in READY
                 // TODO termination protocol
+                terminationProtocol(t);
             }
+        }
+
+        if(Main.SERVER_DEBUG_RECOVERY){
+            print("Server recovered");
+            print("KEYSET: " + pendingResource.keySet().toString());
+            print("PENDING TXN: " + pendingTransactions.toString());
         }
 //        getContext().become(createReceive());
 //
@@ -260,6 +271,8 @@ public class Server extends Node {
     public void onTransactionRead(CoordinatorServerMessage.TransactionRead msg) {
         if (!maybeCrash(CrashBefore2PC.ON_COORD_MSG)) {
             int valueRead = processWorkspace(msg).getValue();
+            if(Main.SERVER_DEBUG_READ)
+                print("Read operation on key " + valueRead);
             reply(new CoordinatorServerMessage.TxnReadResponseMsg(msg.transaction, msg.key, valueRead));
         }
     }
@@ -283,14 +296,16 @@ public class Server extends Node {
 
     // schedule a Timeout message in specified time
     void setTimeout(int time, Transaction transaction) {
-        print("Set timeout for transaction " + transaction.getTxnId());
+        if(Main.SERVER_DEBUG_SET_TIMEOUT)
+            print("Set timeout for transaction " + transaction.getTxnId());
         ServerTransaction t = transactionMap.get(transaction);
         t.setTimeout(newTimeout(time, t));
     }
 
     protected void unsetTimeout(Transaction transaction) {
         ServerTransaction t = transactionMap.get(transaction);
-        print("Unset timeout for transaction " + t.getTxnId());
+        if(Main.SERVER_DEBUG_UNSET_TIMEOUT)
+            print("Unset timeout for transaction " + t.getTxnId());
         if (t.getTimeout() != null)
             t.getTimeout().cancel();
         t.setTimeout(null);
@@ -306,10 +321,27 @@ public class Server extends Node {
         sendMessage(getSender(), msg, setTimeout);
     }
 
-    void multicast(CoordinatorServerMessage m, Collection<ActorRef> group, Boolean setTimeout) {
-        for (ActorRef p : group)
-            sendMessage(p, m);
-        if (setTimeout)
-            setTimeout(Main.TIMEOUT, m.transaction);
+    Boolean multicast(CoordinatorServerMessage m, Collection<ActorRef> group, Boolean setTimeout, Class phase) {
+        CrashPhase zeroMsg = getZeroMsgCrashPhase(phase);
+        CrashPhase rndMsg = getRndMsgCrashPhase(phase);
+        CrashPhase allMsg = getAllMsgCrashPhase(phase);
+
+        if (zeroMsg != null && !maybeCrash(zeroMsg)) {
+            for (ActorRef p : group) {
+                if (rndMsg != null && !maybeCrash(rndMsg)) {
+                    sendMessage(p, m);
+                } else {
+                    return true;
+                }
+            }
+        } else {
+            return true;
+        }
+        if(allMsg == null || !maybeCrash(allMsg)){
+            if (setTimeout)
+                setTimeout(Main.TIMEOUT, m.transaction);
+            return false;
+        }
+        return false;
     }
 }

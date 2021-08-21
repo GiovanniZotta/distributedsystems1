@@ -49,7 +49,7 @@ public class Client extends AbstractActor {
 
     private Cancellable setTimeout(Serializable msg) {
         return getContext().system().scheduler().scheduleOnce(
-                Duration.create(Main.TIMEOUT, TimeUnit.MILLISECONDS),
+                Duration.create(Main.CLIENT_TIMEOUT, TimeUnit.MILLISECONDS),
                 getSelf(),
                 msg, // message sent to myself
                 getContext().system().dispatcher(), getSelf()
@@ -68,6 +68,8 @@ public class Client extends AbstractActor {
         // some delay between transactions from the same client
         try { Thread.sleep(10); }
         catch (InterruptedException e) { e.printStackTrace(); }
+
+        unsetTimeout();
 
         acceptedTxn = false;
         numAttemptedTxn++;
@@ -193,7 +195,8 @@ public class Client extends AbstractActor {
     }
 
     private void onTxnResultMsg(ClientCoordinatorMessage.TxnResultMsg msg) throws InterruptedException {
-        if (msg.numAttemptedTxn == numAttemptedTxn) {
+        System.out.println("IMPORTANTEE!!! " + msg.numAttemptedTxn + " ==?== " + numAttemptedTxn + ", COMMIT? " + msg.commit);
+        if (msg.numAttemptedTxn.equals(numAttemptedTxn)) {
             unsetTimeout();
             if (msg.commit) {
                 numCommittedTxn++;

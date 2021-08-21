@@ -27,7 +27,7 @@ public abstract class CoordinatorServerMessage extends Message {
 
         public VoteRequest(Transaction transaction, Set<ActorRef> servers) {
             super(transaction);
-            this.servers = Collections.unmodifiableList(new ArrayList<>(servers));;
+            this.servers = Collections.unmodifiableList(new ArrayList<>(servers));
         }
     }
 

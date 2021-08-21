@@ -18,8 +18,8 @@ public class Checker extends AbstractActor {
     private Integer partialSum;
     private Set<ActorRef> coordinators;
     private Set<ActorRef> servers;
-    private Map<ActorRef, Node.CrashPhaseMap> numServerCrashes;
-    private Map<ActorRef, Node.CrashPhaseMap> numCoordinatorCrashes;
+    private final Map<ActorRef, Node.CrashPhaseMap> numServerCrashes;
+    private final Map<ActorRef, Node.CrashPhaseMap> numCoordinatorCrashes;
     public Checker(){
         this.counterCoordinators = 0;
         this.counterServers = 0;
