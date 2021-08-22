@@ -30,8 +30,8 @@ public class Main {
     public final static int SERVER_TIMEOUT = 1000;  // server timeout, ms
     public final static int CLIENT_TIMEOUT = 1000;  // timeout for client, ms
     public static final double COORD_CRASH_PROBABILITY = 0.0001;
-    public static final double SERVER_CRASH_PROBABILITY = 0.0001;
-    public static final int MAX_NODE_DELAY = 1; // network delay
+    public static final double SERVER_CRASH_PROBABILITY = 0.001;
+    public static final int MAX_NODE_DELAY = 5; // network delay
     public static final int CORRECTNESS_DELAY = 10000;
 
     /*-- Node debug ---------------------------------------------------------*/
@@ -56,6 +56,7 @@ public class Main {
     public static final Boolean SERVER_DEBUG_UNSET_TIMEOUT = false;
     public static final Boolean SERVER_DEBUG_RECOVERY = true;
     public static final Boolean SERVER_DEBUG_READ = false;
+    public static final Boolean SERVER_DEBUG_TIMEOUT = true;
 
     /*-- Coordinator debug ---------------------------------------------------------*/
     public static final Boolean COORD_DEBUG_RECOVERY = true;

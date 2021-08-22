@@ -159,12 +159,18 @@ public abstract class Node extends AbstractActor {
 
     protected void sendMessage(ActorRef to, Message msg) {
         Integer delay = r.nextInt(Main.MAX_NODE_DELAY);
-        getContext().system().scheduler().scheduleOnce(
-                Duration.create(delay, TimeUnit.MILLISECONDS),
-                to,
-                msg,
-                getContext().system().dispatcher(), getSelf()
-        );
+//        getContext().system().scheduler().scheduleOnce(
+//                Duration.create(delay, TimeUnit.MILLISECONDS),
+//                to,
+//                msg,
+//                getContext().system().dispatcher(), getSelf()
+//        );
+        try {
+            Thread.sleep(delay);
+            to.tell(msg, getSelf());
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
     protected void reply(Message msg) {

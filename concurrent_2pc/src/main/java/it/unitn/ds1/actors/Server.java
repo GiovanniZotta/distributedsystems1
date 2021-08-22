@@ -163,7 +163,8 @@ public class Server extends Node {
 
     public void onTimeout(CoordinatorServerMessage.TimeoutMsg msg) {
         if (!hasDecided(msg.transaction)) {
-            System.out.println("TIMEOUT FOR TXN " + msg.transaction.getTxnId());
+            if(Main.SERVER_DEBUG_TIMEOUT)
+                print("TIMEOUT FOR TXN " + msg.transaction.getTxnId());
             ServerTransaction t = transactionMap.get(msg.transaction);
             assert t.getState() != Transaction.State.DECIDED;
             if (t.getState() == Transaction.State.INIT) // this should never happen
