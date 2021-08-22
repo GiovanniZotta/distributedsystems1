@@ -40,7 +40,7 @@ public class CoordinatorTransaction extends Transaction {
 
     public void pushServerTimeout(ActorRef server, Cancellable timeout) {
         if (!timeouts.containsKey(server))
-            timeouts.put(server, new LinkedBlockingQueue<Cancellable>());
+            timeouts.put(server, new LinkedBlockingQueue<>());
         timeouts.get(server).add(timeout);
     }
 

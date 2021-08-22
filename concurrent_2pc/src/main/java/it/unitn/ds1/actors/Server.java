@@ -145,11 +145,12 @@ public class Server extends Node {
         }
         if(Main.SERVER_DEBUG_SEND_VOTE)
             print("Server " + id + " sending vote " + vote);
+        // TODO crash
         reply(new CoordinatorServerMessage.VoteResponse(transaction, vote), true);
 //        setTimeout(Main.DECISION_TIMEOUT);
     }
 
-    private void terminationProtocol(Transaction transaction){
+    private void terminationProtocol(Transaction transaction) throws CrashException {
         ServerTransaction t = transactionMap.get(transaction);
         List<ActorRef> dest = new ArrayList<>(t.getServers());
         dest.add(t.getCoordinator());
@@ -166,15 +167,11 @@ public class Server extends Node {
             else {
                 // if voted commit do termination protocol:
                 // ask decision to coordinator and fellow servers
-                terminationProtocol(t);
+                try {
+                    terminationProtocol(t);
+                } catch (CrashException e) {}
             }
         }
-        //        if (!hasDecided()) {
-        //            print("Timeout. Asking around.");
-        //
-        //            // TODO 3: participant termination protocol
-        //            // termination protocol: ask group if anybody knows the decision
-        //        }
     }
 
     @Override
@@ -185,8 +182,9 @@ public class Server extends Node {
             if (transactionMap.get(t).getState() == Transaction.State.INIT)
                 fixDecision(t, CoordinatorServerMessage.Decision.ABORT);
             else { // it is in READY
-                // TODO termination protocol
-                terminationProtocol(t);
+                try {
+                    terminationProtocol(t);
+                } catch (CrashException e) {}
             }
         }
 
@@ -204,11 +202,6 @@ public class Server extends Node {
 //            coordinator.tell(new CoordinatorServerMessages.DecisionRequest(), getSelf());
 //            setTimeout(Main.DECISION_TIMEOUT);
 //        }
-    }
-
-    @Override
-    void multicastAndCrash(Serializable m, int recoverIn) {
-
     }
 
     private void commitWorkspace(Transaction transaction){
@@ -269,19 +262,22 @@ public class Server extends Node {
     }
 
     public void onTransactionRead(CoordinatorServerMessage.TransactionRead msg) {
-        if (!maybeCrash(CrashBefore2PC.ON_COORD_MSG)) {
+        try {
+            maybeCrash(CrashBefore2PC.ON_COORD_MSG);
             int valueRead = processWorkspace(msg).getValue();
             if(Main.SERVER_DEBUG_READ)
                 print("Read operation on key " + valueRead);
             reply(new CoordinatorServerMessage.TxnReadResponseMsg(msg.transaction, msg.key, valueRead));
-        }
+        } catch (CrashException e) {}
     }
 
     public void onTransactionWrite(CoordinatorServerMessage.TransactionWrite msg) {
         WorkspaceResource resource = processWorkspace(msg);
         resource.setValue(msg.value);
         resource.setChanged(true);
-        maybeCrash(CrashBefore2PC.ON_COORD_MSG);
+        try {
+            maybeCrash(CrashBefore2PC.ON_COORD_MSG);
+        } catch (CrashException e) {}
     }
 
     @Override
@@ -291,6 +287,7 @@ public class Server extends Node {
             result += database.get(key).getValue();
         }
         reply(new Message.CheckCorrectnessResponse(id, result, numCrashes));
+        getContext().stop(getSelf());
     }
 
 
@@ -321,27 +318,21 @@ public class Server extends Node {
         sendMessage(getSender(), msg, setTimeout);
     }
 
-    Boolean multicast(CoordinatorServerMessage m, Collection<ActorRef> group, Boolean setTimeout, Class phase) {
+    void multicast(CoordinatorServerMessage m, Collection<ActorRef> group, Boolean setTimeout, Class phase) throws CrashException {
         CrashPhase zeroMsg = getZeroMsgCrashPhase(phase);
         CrashPhase rndMsg = getRndMsgCrashPhase(phase);
         CrashPhase allMsg = getAllMsgCrashPhase(phase);
 
-        if (zeroMsg != null && !maybeCrash(zeroMsg)) {
-            for (ActorRef p : group) {
-                if (rndMsg != null && !maybeCrash(rndMsg)) {
-                    sendMessage(p, m);
-                } else {
-                    return true;
-                }
-            }
-        } else {
-            return true;
+        if (zeroMsg != null)
+            maybeCrash(zeroMsg);
+        for (ActorRef p : group) {
+            if (rndMsg != null)
+                maybeCrash(rndMsg);
+            sendMessage(p, m);
         }
-        if(allMsg == null || !maybeCrash(allMsg)){
-            if (setTimeout)
-                setTimeout(Main.TIMEOUT, m.transaction);
-            return false;
-        }
-        return false;
+        if(allMsg != null)
+            maybeCrash(allMsg);
+        if (setTimeout)
+            setTimeout(Main.TIMEOUT, m.transaction);
     }
 }

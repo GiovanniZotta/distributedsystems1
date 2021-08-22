@@ -45,6 +45,8 @@ public abstract class Node extends AbstractActor {
             return res;
         }
     }
+    public class CrashException extends Exception {
+    }
 
     protected static final double CRASH_PROBABILITY = 0.0001;
     protected int id;                           // node ID
@@ -82,7 +84,7 @@ public abstract class Node extends AbstractActor {
     }
 
     // emulate a crash and a recovery in a given time
-    void crash(int recoverIn, CrashPhase crashPhase) {
+    void crash(int recoverIn, CrashPhase crashPhase) throws CrashException {
         getContext().become(crashed());
         numCrashes.put(crashPhase, numCrashes.getOrDefault(crashPhase, 0) + 1);
         if(Main.NODE_DEBUG_CRASH)
@@ -95,14 +97,13 @@ public abstract class Node extends AbstractActor {
                 new CoordinatorServerMessage.RecoveryMsg(), // message sent to myself
                 getContext().system().dispatcher(), getSelf()
         );
+        throw new CrashException();
     }
 
-    Boolean maybeCrash(CrashPhase crashPhase) {
+    void maybeCrash(CrashPhase crashPhase) throws CrashException {
         if (crashPhases.contains(crashPhase) && r.nextDouble() < CRASH_PROBABILITY) {
             crash(Main.MIN_RECOVERY_TIME + r.nextInt(Main.MAX_RECOVERY_TIME - Main.MIN_RECOVERY_TIME), crashPhase);
-            return true;
         }
-        return false;
     }
 
     // emulate a delay of d milliseconds
@@ -112,11 +113,6 @@ public abstract class Node extends AbstractActor {
         } catch (Exception ignored) {
         }
     }
-
-    // a multicast implementation that crashes after sending the first message
-    abstract void multicastAndCrash(Serializable m, int recoverIn);
-
-
 
     boolean hasDecided(Transaction transaction) {
         return transaction2decision.get(transaction) != null;
