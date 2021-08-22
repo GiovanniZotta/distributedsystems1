@@ -12,7 +12,6 @@ import it.unitn.ds1.messages.ClientCoordinatorMessage;
 import it.unitn.ds1.messages.CoordinatorServerMessage;
 import it.unitn.ds1.messages.Message;
 
-import java.io.Serializable;
 import java.util.*;
 
 public class Coordinator extends Node {
@@ -98,9 +97,6 @@ public class Coordinator extends Node {
             transaction2decision.put(transaction, d);
             transaction.setState(Transaction.State.DECIDED);
             ActorRef client = transaction2client.get(transaction);
-            if(client == null)
-                throw new NullPointerException();
-            print(client.toString());
             sendMessage(client,
                     new ClientCoordinatorMessage.TxnResultMsg(
                             transaction.getClientId(), transaction.getNumAttemptedTxn(),
@@ -109,8 +105,8 @@ public class Coordinator extends Node {
             client2transaction.remove(client);
             transaction2client.remove(transaction);
             if (Main.COORD_DEBUG_DECISION)
-                print("Coordinator " + this.id + " decided " + d
-                        + " on transaction " + transaction.getTxnId());
+                print("DECIDED " + d
+                        + " ON TXN " + transaction.getTxnId());
         }
     }
 
@@ -129,12 +125,12 @@ public class Coordinator extends Node {
         CoordinatorTransaction transaction = getCTfromTransaction(msg.transaction);
         CoordinatorServerMessage.Vote v = (msg).vote;
         if(Main.COORD_DEBUG_RECEIVED_VOTE)
-            print("Received vote");
+            print("RECEIVED VOTE " + v.toString() + " FROM SERVER " + servers.indexOf(getSender()));
         if (v == CoordinatorServerMessage.Vote.YES) {
             transaction.getYesVoters().add(getSender());
             if (allVotedYes(transaction)) {
-                if(Main.DEBUG_COORD_ALL_VOTED_YES)
-                    print("All voted yes");
+                if(Main.COORD_DEBUG_ALL_VOTED_YES)
+                    print("ALL VOTED YES");
                 try {
                     takeDecision(transaction, CoordinatorServerMessage.Decision.COMMIT);
                 } catch (CrashException ignored) {}
@@ -151,7 +147,7 @@ public class Coordinator extends Node {
 
     public void onTimeoutMsg(CoordinatorServerMessage.TimeoutMsg msg) {
         if(Main.COORD_DEBUG_TIMEOUT)
-            print("Timeout for transaction " + msg.transaction.getTxnId());
+            print("TIMEOUT FOR TRANSACTION " + msg.transaction.getTxnId());
         CoordinatorTransaction t = getCTfromTransaction(msg.transaction);
         if (t == null)
             return;
@@ -177,7 +173,7 @@ public class Coordinator extends Node {
         getContext().become(createReceive());
 
         if(Main.COORD_DEBUG_RECOVERY)
-            print("Coordinator recovered");
+            print("RECOVERED");
 
         try {
             for (Transaction t : new HashSet<>(pendingTransactions)) {
@@ -189,7 +185,7 @@ public class Coordinator extends Node {
     public void onTxnBeginMsg(ClientCoordinatorMessage.TxnBeginMsg msg) {
         // initialize transaction
         CoordinatorTransaction t = client2transaction.get(getSender());
-        print("got txn begin from " + msg.clientId + ", new_txn: " + msg.numAttemptedTxn + ", old_txn: " + (t != null ? t.getTxnId() : "null"));
+
         try {
             if (t != null)
                 takeDecision(t, CoordinatorServerMessage.Decision.ABORT);
@@ -199,7 +195,7 @@ public class Coordinator extends Node {
             transaction2client.put(t, getSender());
             pendingTransactions.add(t);
             if(Main.COORD_DEBUG_BEGIN_TXN)
-                print("Starting transaction from " + t.getClientId());
+                print("GOT TXN BEGIN FROM " + msg.clientId + ", NEW_TXN: " + msg.numAttemptedTxn + ", OLD_TXN: " + (t != null ? t.getTxnId() : "null"));
             // send accept
 
             maybeCrash(CrashBefore2PC.BEFORE_TXN_ACCEPT_MSG);
@@ -209,7 +205,7 @@ public class Coordinator extends Node {
 
     private void takeDecision(Transaction transaction, CoordinatorServerMessage.Decision decision) throws CrashException {
         if(Main.COORD_DEBUG_DECISION)
-            print("Taking decision for transaction " + transaction.getTxnId() + ", decision: " + transaction2decision.get(transaction));
+            print("TAKING DECISION FOR TXN " + transaction.getTxnId() + ", OLD DECISION: " + transaction2decision.get(transaction));
         CoordinatorTransaction transaction1 = getCTfromTransaction(transaction);
         unsetTimeout(transaction1);
         fixDecision(transaction1, decision);
@@ -222,7 +218,7 @@ public class Coordinator extends Node {
             try{
                 if (msg.commit) {
                     if(Main.COORD_DEBUG_BEGIN_VOTE)
-                        print("sending vote request");
+                        print("SENDING VOTE REQUEST");
 
                     multicast(new CoordinatorServerMessage.VoteRequest(transaction, transaction.getServers()), transaction.getServers(),
                             true, CrashDuring2PC.CrashDuringVote.class);
@@ -232,11 +228,6 @@ public class Coordinator extends Node {
                 }
             } catch (CrashException e) {}
         }
-//        print("Sending vote requests");
-//        multicast(new CoordinatorServerMessages.VoteRequest());
-//      multicastAndCrash(new VoteRequest(), 3000);
-//        setTimeout(Main.VOTE_TIMEOUT);
-//      crash(5000);
     }
 
     private void trackServerForTxn(CoordinatorTransaction transaction, Integer serverId) throws CrashException {
@@ -246,7 +237,7 @@ public class Coordinator extends Node {
 
     public void onReadMsg(ClientCoordinatorMessage.ReadMsg msg) {
         if(Main.COORD_DEBUG_READ){
-            print("Reading key " + msg.key);
+            print("READING KEY " + msg.key);
         }
         CoordinatorTransaction transaction = client2transaction.get(getSender());
         if (isCurrentTransaction(transaction, msg)) {
@@ -271,7 +262,7 @@ public class Coordinator extends Node {
                     msg.key,
                     msg.valueRead));
             if(Main.COORD_DEBUG_READ_RESPONSE)
-                print("Replying with value " + msg.valueRead + " for key " + msg.key);
+                print("REPLYING WITH VALUE " + msg.valueRead + " FOR KEY " + msg.key);
         } catch (CrashException e) {}
 
     }
@@ -301,7 +292,7 @@ public class Coordinator extends Node {
 
     void setTimeout(int time, Transaction transaction, ActorRef server) {
         if(Main.COORD_DEBUG_SET_TIMEOUT)
-            print("Set timeout for transaction " + transaction.getTxnId() + " for server " + servers.indexOf(server));
+            print("SET TIMEOUT FOR TRANSACTION " + transaction.getTxnId() + " FOR SERVER " + servers.indexOf(server));
         CoordinatorTransaction t = getCTfromTransaction(transaction);
         t.pushServerTimeout(server, newTimeout(time, t));
     }
@@ -317,7 +308,7 @@ public class Coordinator extends Node {
 //                    to.
                 } else {
                     if(Main.COORD_DEBUG_UNSET_TIMEOUT)
-                        print("Unset timeout for transaction " + transaction.getTxnId() + " for server " + servers.indexOf(server));
+                        print("UNSET TIMEOUT FOR TRANSACTION " + transaction.getTxnId() + " FOR SERVER " + servers.indexOf(server));
                 }
             }
         }
@@ -336,7 +327,7 @@ public class Coordinator extends Node {
     protected void sendMessage(ActorRef to, CoordinatorServerMessage msg, Boolean setTimeout) {
         super.sendMessage(to, msg);
         if (setTimeout)
-            setTimeout(Main.TIMEOUT, msg.transaction, to);
+            setTimeout(Main.COORD_TIMEOUT, msg.transaction, to);
     }
 
     void multicast(CoordinatorServerMessage m, Collection<ActorRef> group, Boolean setTimeout, Class phase) throws CrashException {

@@ -3,12 +3,15 @@ package it.unitn.ds1.actors;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
+import it.unitn.ds1.Main;
 import it.unitn.ds1.transactions.Transaction;
 import it.unitn.ds1.messages.CoordinatorServerMessage;
 import it.unitn.ds1.messages.Message;
+import scala.concurrent.duration.Duration;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 
 /*-- Participant -----------------------------------------------------------*/
@@ -48,6 +51,7 @@ public class Checker extends AbstractActor {
 
     public void onCheckCorrectness(Message.CheckCorrectness msg) {
 
+        System.out.println("CHECKING CORRECTNESS");
         for(ActorRef coordinator : coordinators){
             coordinator.tell(new Message.CheckCorrectness(), getSelf());
         }
@@ -67,14 +71,14 @@ public class Checker extends AbstractActor {
         counterServers++;
         numServerCrashes.put(getSender(), msg.numCrashes);
         if (counterServers == servers.size()) {
+            System.out.println("/---- SERVER CRASHES ----/");
+            printCrashes(numServerCrashes);
             System.out.println("##### CORRECTNESS CHECK #####");
             Integer correctSum = servers.size() * (Server.DB_SIZE * Server.DEFAULT_VALUE);
             System.out.println("CORRECT SUM: " + correctSum);
             System.out.println("ACTUAL SUM: " + partialSum);
             assert (partialSum == correctSum);
             System.out.println("##### CORRECTNESS CHECK #####");
-            System.out.println("SERVER CRASHES");
-            printCrashes(numServerCrashes);
         }
     }
 
@@ -82,12 +86,10 @@ public class Checker extends AbstractActor {
         counterCoordinators++;
         numCoordinatorCrashes.put(getSender(), msg.numCrashes);
         if (counterCoordinators == coordinators.size()) {
-            System.out.println("COORDINATOR CRASHES");
+            System.out.println("/---- COORDINATOR CRASHES ----/");
             printCrashes(numCoordinatorCrashes);
         }
     }
-
-
 
     public void onCheckCorrectnessResponse (Message.CheckCorrectnessResponse msg) throws InterruptedException {
         if (coordinators.contains(getSender())){

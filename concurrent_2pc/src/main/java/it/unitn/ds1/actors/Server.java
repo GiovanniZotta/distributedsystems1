@@ -144,9 +144,13 @@ public class Server extends Node {
             vote = CoordinatorServerMessage.Vote.YES;
         }
         if(Main.SERVER_DEBUG_SEND_VOTE)
-            print("Server " + id + " sending vote " + vote);
-        // TODO crash
-        reply(new CoordinatorServerMessage.VoteResponse(transaction, vote), true);
+            print("SENDING VOTE " + vote);
+        try{
+            maybeCrash(CrashDuring2PC.CrashDuringVote.NO_VOTE);
+            reply(new CoordinatorServerMessage.VoteResponse(transaction, vote), true);
+            maybeCrash(CrashDuring2PC.CrashDuringVote.AFTER_VOTE);
+        } catch (CrashException e){}
+
 //        setTimeout(Main.DECISION_TIMEOUT);
     }
 
@@ -159,7 +163,7 @@ public class Server extends Node {
 
     public void onTimeout(CoordinatorServerMessage.TimeoutMsg msg) {
         if (!hasDecided(msg.transaction)) {
-            System.out.println("Server " + id + " timeout for transaction from client " + msg.transaction.getClientId());
+            System.out.println("TIMEOUT FOR TXN " + msg.transaction.getTxnId());
             ServerTransaction t = transactionMap.get(msg.transaction);
             assert t.getState() != Transaction.State.DECIDED;
             if (t.getState() == Transaction.State.INIT) // this should never happen
@@ -189,19 +193,10 @@ public class Server extends Node {
         }
 
         if(Main.SERVER_DEBUG_RECOVERY){
-            print("Server recovered");
-            print("KEYSET: " + pendingResource.keySet().toString());
-            print("PENDING TXN: " + pendingTransactions.toString());
+            print("RECOVERED");
+//            print("KEYSET: " + pendingResource.keySet().toString());
+//            print("PENDING TXN: " + pendingTransactions.toString());
         }
-//        getContext().become(createReceive());
-//
-//        // We don't handle explicitly the "not voted" case here
-//        // (in any case, it does not break the protocol)
-//        if (!hasDecided()) {
-//            print("Recovery. Asking the coordinator.");
-//            coordinator.tell(new CoordinatorServerMessages.DecisionRequest(), getSelf());
-//            setTimeout(Main.DECISION_TIMEOUT);
-//        }
     }
 
     private void commitWorkspace(Transaction transaction){
@@ -227,7 +222,7 @@ public class Server extends Node {
             transactionMap.get(transaction).setState(Transaction.State.DECIDED);
 
             if(Main.SERVER_DEBUG_DECIDED)
-                print(" Server decided " + d);
+                print("DECIDED " + d + " ON TXN " + transaction.getTxnId());
             if(d == CoordinatorServerMessage.Decision.COMMIT){
                 commitWorkspace(transaction);
             }
@@ -266,7 +261,7 @@ public class Server extends Node {
             maybeCrash(CrashBefore2PC.ON_COORD_MSG);
             int valueRead = processWorkspace(msg).getValue();
             if(Main.SERVER_DEBUG_READ)
-                print("Read operation on key " + valueRead);
+                print("READ OPERATION ON KEY " + valueRead + " FOR TXN " + msg.transaction.getTxnId());
             reply(new CoordinatorServerMessage.TxnReadResponseMsg(msg.transaction, msg.key, valueRead));
         } catch (CrashException e) {}
     }
@@ -294,7 +289,7 @@ public class Server extends Node {
     // schedule a Timeout message in specified time
     void setTimeout(int time, Transaction transaction) {
         if(Main.SERVER_DEBUG_SET_TIMEOUT)
-            print("Set timeout for transaction " + transaction.getTxnId());
+            print("SET TIMEOUT FOR TXN " + transaction.getTxnId());
         ServerTransaction t = transactionMap.get(transaction);
         t.setTimeout(newTimeout(time, t));
     }
@@ -302,7 +297,7 @@ public class Server extends Node {
     protected void unsetTimeout(Transaction transaction) {
         ServerTransaction t = transactionMap.get(transaction);
         if(Main.SERVER_DEBUG_UNSET_TIMEOUT)
-            print("Unset timeout for transaction " + t.getTxnId());
+            print("UNSET TIMEOUT FOR TXN " + t.getTxnId());
         if (t.getTimeout() != null)
             t.getTimeout().cancel();
         t.setTimeout(null);
@@ -311,7 +306,7 @@ public class Server extends Node {
     protected void sendMessage(ActorRef to, CoordinatorServerMessage msg, Boolean setTimeout) {
         super.sendMessage(to, msg);
         if (setTimeout)
-            setTimeout(Main.TIMEOUT, msg.transaction);
+            setTimeout(Main.SERVER_TIMEOUT, msg.transaction);
     }
 
     protected void reply(CoordinatorServerMessage msg, Boolean setTimeout) {
@@ -333,6 +328,6 @@ public class Server extends Node {
         if(allMsg != null)
             maybeCrash(allMsg);
         if (setTimeout)
-            setTimeout(Main.TIMEOUT, m.transaction);
+            setTimeout(Main.SERVER_TIMEOUT, m.transaction);
     }
 }

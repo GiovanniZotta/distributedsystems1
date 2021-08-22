@@ -86,7 +86,7 @@ public class Client extends AbstractActor {
         // timeout for confirmation of TXN by the coordinator (sent to self)
         acceptTimeout = setTimeout(new TimeoutMessages.Client.TxnAcceptMsg());
         if(Main.CLIENT_DEBUG_BEGIN_TXN)
-            System.out.println("CLIENT " + clientId + " BEGIN");
+            print("BEGIN");
     }
 
     // end the current TXN sending TxnEndMsg to the coordinator
@@ -98,7 +98,7 @@ public class Client extends AbstractActor {
         firstValue = null;
         secondValue = null;
         if(Main.CLIENT_DEBUG_END_TXN)
-            System.out.println("CLIENT " + clientId + " END");
+            print("END");
     }
 
     // READ two items (will move some amount from the value of the first to the second)
@@ -117,7 +117,7 @@ public class Client extends AbstractActor {
         firstValue = null;
         secondValue = null;
         if(Main.CLIENT_DEBUG_READ_TXN)
-            System.out.println("CLIENT " + clientId + " READ #"+ numOpDone + " (" + firstKey + "), (" + secondKey + ")");
+            print("READ #"+ numOpDone + " (" + firstKey + "), (" + secondKey + ")");
     }
 
     // WRITE two items (called with probability WRITE_PROBABILITY after readTwo() values are returned)
@@ -130,7 +130,7 @@ public class Client extends AbstractActor {
         currentCoordinator.tell(new ClientCoordinatorMessage.WriteMsg(clientId, numAttemptedTxn, secondKey, secondValue + amountTaken), getSelf());
 
         if(Main.CLIENT_DEBUG_WRITE_TXN)
-            System.out.println("CLIENT " + clientId + " WRITE #"+ numOpDone
+            print("RITE #"+ numOpDone
                 + " taken " + amountTaken
                 + " (" + firstKey + ", " + (firstValue - amountTaken) + "), ("
                 + secondKey + ", " + (secondValue + amountTaken) + ")");
@@ -146,7 +146,7 @@ public class Client extends AbstractActor {
     }
 
     private void onStopMsg(Message.StopMsg msg) {
-        System.out.println("CLIENT " + clientId + " SUCCESSFUL COMMITS: ("
+        print("SUCCESSFUL COMMITS: ("
         + numCommittedTxn + "/" + numAttemptedTxn + ")");
         getContext().stop(getSelf());
     }
@@ -161,7 +161,7 @@ public class Client extends AbstractActor {
 
     private void onReadResultMsg(ClientCoordinatorMessage.ReadResultMsg msg) {
         if(Main.CLIENT_DEBUG_READ_RESULT)
-            System.out.println("CLIENT " + clientId + " READ RESULT (" + msg.key + ", " + msg.value + ")");
+            print("READ RESULT (" + msg.key + ", " + msg.value + ")");
 
         // save the read value(s)
         if(msg.key.equals(firstKey)) firstValue = msg.value;
@@ -195,17 +195,17 @@ public class Client extends AbstractActor {
     }
 
     private void onTxnResultMsg(ClientCoordinatorMessage.TxnResultMsg msg) throws InterruptedException {
-        System.out.println("IMPORTANTEE!!! " + msg.numAttemptedTxn + " ==?== " + numAttemptedTxn + ", COMMIT? " + msg.commit);
+        if (msg.commit) {
+            numCommittedTxn++;
+            if (Main.CLIENT_DEBUG_COMMIT_OK)
+                print("COMMIT OK (" + numCommittedTxn + "/" + numAttemptedTxn + ")");
+        } else {
+            if (Main.CLIENT_DEBUG_COMMIT_KO)
+                print("COMMIT FAIL (" + (numAttemptedTxn - numCommittedTxn) + "/" + numAttemptedTxn + ")");
+        }
+
         if (msg.numAttemptedTxn.equals(numAttemptedTxn)) {
             unsetTimeout();
-            if (msg.commit) {
-                numCommittedTxn++;
-                if (Main.CLIENT_DEBUG_COMMIT_OK)
-                    System.out.println("CLIENT " + clientId + " COMMIT OK (" + numCommittedTxn + "/" + numAttemptedTxn + ")");
-            } else {
-                if (Main.CLIENT_DEBUG_COMMIT_KO)
-                    System.out.println("CLIENT " + clientId + " COMMIT FAIL (" + (numAttemptedTxn - numCommittedTxn) + "/" + numAttemptedTxn + ")");
-            }
             beginTxn();
         }
     }
@@ -214,7 +214,7 @@ public class Client extends AbstractActor {
     private void onTxnAcceptTimeoutMsg(TimeoutMessages.Client.TxnAcceptMsg msg) throws InterruptedException {
         if(!acceptedTxn) {
             if(Main.CLIENT_DEBUG_TIMEOUT_TXN_ACCEPT)
-                System.out.println("CLIENT " + clientId + " TIMEOUT DURING ACCEPT, ABORTING CURRENT TRANSACTION");
+                print("TIMEOUT DURING ACCEPT, ABORTING CURRENT TRANSACTION");
             beginTxn();
         }
     }
@@ -222,7 +222,7 @@ public class Client extends AbstractActor {
     private void onTxnOperationTimeoutMsg(TimeoutMessages.Client.TxnOperationMsg msg) throws InterruptedException {
         // abort
         if(Main.CLIENT_DEBUG_TIMEOUT_TXN_OPERATION)
-            System.out.println("CLIENT " + clientId + " TIMEOUT DURING OPERATION, ABORTING CURRENT TRANSACTION");
+            print("TIMEOUT DURING OPERATION, ABORTING CURRENT TRANSACTION");
         beginTxn();
     }
 
@@ -237,5 +237,9 @@ public class Client extends AbstractActor {
                 .match(TimeoutMessages.Client.TxnAcceptMsg.class,  this::onTxnAcceptTimeoutMsg)
                 .match(TimeoutMessages.Client.TxnOperationMsg.class,  this::onTxnOperationTimeoutMsg)
                 .build();
+    }
+
+    private void print(String msg){
+        System.out.format("Client      %2d: %s\n", clientId, msg);
     }
 }

@@ -11,7 +11,6 @@ import it.unitn.ds1.messages.CoordinatorServerMessage;
 import it.unitn.ds1.messages.Message;
 import scala.concurrent.duration.Duration;
 
-import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -48,7 +47,6 @@ public abstract class Node extends AbstractActor {
     public class CrashException extends Exception {
     }
 
-    protected static final double CRASH_PROBABILITY = 0.0001;
     protected int id;                           // node ID
     protected List<ActorRef> servers;      // list of participant nodes
     protected ActorRef checker;
@@ -80,7 +78,7 @@ public abstract class Node extends AbstractActor {
             }
         }
         if(Main.NODE_DEBUG_STARTING_SIZE)
-            print("starting with " + sm.group.size() + " peer(s)");
+            print("STARTING WITH " + sm.group.size() + " PEER(S)");
     }
 
     // emulate a crash and a recovery in a given time
@@ -88,7 +86,7 @@ public abstract class Node extends AbstractActor {
         getContext().become(crashed());
         numCrashes.put(crashPhase, numCrashes.getOrDefault(crashPhase, 0) + 1);
         if(Main.NODE_DEBUG_CRASH)
-            print("CRASH in phase " + crashPhase);
+            print("CRASH IN PHASE " + crashPhase);
 
         // setting a timer to "recover"
         getContext().system().scheduler().scheduleOnce(
@@ -101,7 +99,8 @@ public abstract class Node extends AbstractActor {
     }
 
     void maybeCrash(CrashPhase crashPhase) throws CrashException {
-        if (crashPhases.contains(crashPhase) && r.nextDouble() < CRASH_PROBABILITY) {
+        double crash_prob = getClass().equals(Coordinator.class) ? Main.COORD_CRASH_PROBABILITY : Main.SERVER_CRASH_PROBABILITY;
+        if (crashPhases.contains(crashPhase) && r.nextDouble() < crash_prob) {
             crash(Main.MIN_RECOVERY_TIME + r.nextInt(Main.MAX_RECOVERY_TIME - Main.MIN_RECOVERY_TIME), crashPhase);
         }
     }
@@ -120,8 +119,10 @@ public abstract class Node extends AbstractActor {
 
     // a simple logging function
     void print(String s) {
-
-        System.out.format("%s %2d: %s\n", this.getClass().getSimpleName(), id, s);
+        if(this.getClass().equals(Server.class)) 
+            System.out.format("Server      %2d: %s\n", id, s);
+        else 
+            System.out.format("Coordinator %2d: %s\n", id, s);
     }
 
     @Override
@@ -157,7 +158,13 @@ public abstract class Node extends AbstractActor {
 
 
     protected void sendMessage(ActorRef to, Message msg) {
-        to.tell(msg, getSelf());
+        Integer delay = r.nextInt(Main.MAX_NODE_DELAY);
+        getContext().system().scheduler().scheduleOnce(
+                Duration.create(delay, TimeUnit.MILLISECONDS),
+                to,
+                msg,
+                getContext().system().dispatcher(), getSelf()
+        );
     }
 
     protected void reply(Message msg) {

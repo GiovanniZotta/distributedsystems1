@@ -5,18 +5,40 @@ import akka.actor.ActorSystem;
 
 import it.unitn.ds1.actors.*;
 import it.unitn.ds1.messages.Message;
+import scala.concurrent.duration.Duration;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 public class Main {
+
+    /*-- System parameters ---------------------------------------------------------*/
     public final static int N_CLIENTS = 5;
     public final static int N_COORDINATORS = 3;
     public final static int N_SERVER = 5;
     public final static int MAX_KEY = N_SERVER * Server.DB_SIZE - 1;
+
+    /*-- Crash parameters ---------------------------------------------------------*/
+
+    public final static int MIN_RECOVERY_TIME = 1; // minimum recovery time for nodes, ms
+    public final static int MAX_RECOVERY_TIME = 5000; // maximum recovery time for nodes, ms
+    public final static int COORD_TIMEOUT = 500;  // coordinator timeout, ms
+    public final static int SERVER_TIMEOUT = 1000;  // server timeout, ms
+    public final static int CLIENT_TIMEOUT = 1000;  // timeout for client, ms
+    public static final double COORD_CRASH_PROBABILITY = 0.0001;
+    public static final double SERVER_CRASH_PROBABILITY = 0.0001;
+    public static final int MAX_NODE_DELAY = 1; // network delay
+    public static final int CORRECTNESS_DELAY = 10000;
+
+    /*-- Node debug ---------------------------------------------------------*/
+    public final static Boolean NODE_DEBUG_STARTING_SIZE = false;
+    public final static Boolean NODE_DEBUG_CRASH = true;
+
+    /*-- Client debug ---------------------------------------------------------*/
     public final static Boolean CLIENT_DEBUG_BEGIN_TXN = false;
     public final static Boolean CLIENT_DEBUG_END_TXN = false;
     public final static Boolean CLIENT_DEBUG_READ_TXN = false;
@@ -24,34 +46,29 @@ public class Main {
     public final static Boolean CLIENT_DEBUG_READ_RESULT = false;
     public final static Boolean CLIENT_DEBUG_COMMIT_OK = true;
     public final static Boolean CLIENT_DEBUG_COMMIT_KO = false;
-    public final static Boolean SERVER_DEBUG_SEND_VOTE = false;
-    public final static Boolean SERVER_DEBUG_DECIDED = false;
-    public final static Boolean COORD_DEBUG_DECISION = true;
-    public final static Boolean NODE_DEBUG_STARTING_SIZE = false;
-    public final static Boolean NODE_DEBUG_CRASH = true;
-
-    /*-- Timeout debug ---------------------------------------------------------*/
     public static final Boolean CLIENT_DEBUG_TIMEOUT_TXN_OPERATION = true;
     public static final Boolean CLIENT_DEBUG_TIMEOUT_TXN_ACCEPT = true;
 
-    public final static int MAX_RECOVERY_TIME = 5000;      // timeout for the votes, ms
-    public final static int TIMEOUT = 500;  // timeout for the decision, ms
-    public final static int CLIENT_TIMEOUT = 1000;  // timeout for the decision, ms
-    public final static int MIN_RECOVERY_TIME = 1;
-    public static final boolean COORD_DEBUG_BEGIN_VOTE = false;
-    public static final boolean COORD_DEBUG_SET_TIMEOUT = false;
-    public static final boolean COORD_DEBUG_BEGIN_TXN = true;
-    public static final boolean COORD_DEBUG_TIMEOUT = false;
-    public static final boolean COORD_DEBUG_RECEIVED_VOTE = false;
-    public static final boolean DEBUG_COORD_ALL_VOTED_YES = false;
-    public static final boolean COORD_DEBUG_UNSET_TIMEOUT = false;
-    public static final boolean SERVER_DEBUG_SET_TIMEOUT = false;
-    public static final boolean SERVER_DEBUG_UNSET_TIMEOUT = false;
-    public static final boolean COORD_DEBUG_RECOVERY = true;
-    public static final boolean SERVER_DEBUG_RECOVERY = true;
-    public static final boolean SERVER_DEBUG_READ = false;
-    public static final boolean COORD_DEBUG_READ = false;
-    public static final boolean COORD_DEBUG_READ_RESPONSE = false;
+    /*-- Server debug ---------------------------------------------------------*/
+    public final static Boolean SERVER_DEBUG_SEND_VOTE = false;
+    public final static Boolean SERVER_DEBUG_DECIDED = false;
+    public static final Boolean SERVER_DEBUG_SET_TIMEOUT = false;
+    public static final Boolean SERVER_DEBUG_UNSET_TIMEOUT = false;
+    public static final Boolean SERVER_DEBUG_RECOVERY = true;
+    public static final Boolean SERVER_DEBUG_READ = false;
+
+    /*-- Coordinator debug ---------------------------------------------------------*/
+    public static final Boolean COORD_DEBUG_RECOVERY = true;
+    public static final Boolean COORD_DEBUG_UNSET_TIMEOUT = false;
+    public final static Boolean COORD_DEBUG_DECISION = false;
+    public static final Boolean COORD_DEBUG_BEGIN_VOTE = false;
+    public static final Boolean COORD_DEBUG_SET_TIMEOUT = false;
+    public static final Boolean COORD_DEBUG_BEGIN_TXN = false;
+    public static final Boolean COORD_DEBUG_TIMEOUT = false;
+    public static final Boolean COORD_DEBUG_RECEIVED_VOTE = false;
+    public static final Boolean COORD_DEBUG_ALL_VOTED_YES = false;
+    public static final Boolean COORD_DEBUG_READ = false;
+    public static final Boolean COORD_DEBUG_READ_RESPONSE = false;
 
     /*-- Main ------------------------------------------------------------------*/
     public static void main(String[] args) {
@@ -67,6 +84,8 @@ public class Main {
 
         // Create the coordinators
         List<ActorRef> coordinators = new ArrayList<>();
+
+        /*-- Coordinator crash phases ---------------------------------------------------------*/
         Set<Node.CrashPhase> coordinatorCrashPhases = new HashSet<>();
         coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.BEFORE_TXN_ACCEPT_MSG);
         coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.ON_CLIENT_MSG);
@@ -83,6 +102,9 @@ public class Main {
         System.out.println("Coordinators created");
 
         // Create the servers
+        List<ActorRef> servers = new ArrayList<>();
+
+        /*-- Server crash phases ---------------------------------------------------------*/
         Set<Node.CrashPhase> serverCrashPhases = new HashSet<>();
         serverCrashPhases.add(Server.CrashBefore2PC.ON_COORD_MSG);
         serverCrashPhases.add(Server.CrashDuring2PC.CrashDuringVote.NO_VOTE);
@@ -91,7 +113,6 @@ public class Main {
         serverCrashPhases.add(Server.CrashDuring2PC.CrashDuringTermination.RND_REPLY);
         serverCrashPhases.add(Server.CrashDuring2PC.CrashDuringTermination.NO_REPLY);
 
-        List<ActorRef> servers = new ArrayList<>();
         for (int i = 0; i < N_SERVER; i++)
             servers.add(system.actorOf(Server.props(i, serverCrashPhases), "server" + i));
         System.out.println("Servers created");
@@ -132,10 +153,15 @@ public class Main {
             peer.tell(stopMsg, null);
         }
 
-        checker.tell(new Message.CheckCorrectness(), null);
+        system.scheduler().scheduleOnce(
+                Duration.create(Main.CORRECTNESS_DELAY, TimeUnit.MILLISECONDS),
+                checker,
+                new Message.CheckCorrectness(),
+                system.dispatcher(), ActorRef.noSender()
+        );
 
         try {
-            Thread.sleep(5000);
+            Thread.sleep(Main.CORRECTNESS_DELAY + (10*Main.MAX_NODE_DELAY) + 1000);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
