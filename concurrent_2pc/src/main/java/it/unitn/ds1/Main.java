@@ -29,7 +29,7 @@ public class Main {
     public final static int COORD_TIMEOUT = 500;  // coordinator timeout, ms
     public final static int SERVER_TIMEOUT = 1000;  // server timeout, ms
     public final static int CLIENT_TIMEOUT = 1000;  // timeout for client, ms
-    public static final double COORD_CRASH_PROBABILITY = 0.0001;
+    public static final double COORD_CRASH_PROBABILITY = 0.001;
     public static final double SERVER_CRASH_PROBABILITY = 0.001;
     public static final int MAX_NODE_DELAY = 5; // network delay
     public static final int CORRECTNESS_DELAY = 10000;
@@ -89,13 +89,13 @@ public class Main {
         /*-- Coordinator crash phases ---------------------------------------------------------*/
         Set<Node.CrashPhase> coordinatorCrashPhases = new HashSet<>();
         coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.BEFORE_TXN_ACCEPT_MSG);
-        coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.ON_CLIENT_MSG);
-        coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.ON_SERVER_MSG);
+//        coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.ON_CLIENT_MSG);
+//        coordinatorCrashPhases.add(Coordinator.CrashBefore2PC.ON_SERVER_MSG);
         coordinatorCrashPhases.add(Coordinator.CrashDuring2PC.CrashDuringVote.ALL_MSG);
-        coordinatorCrashPhases.add(Coordinator.CrashDuring2PC.CrashDuringVote.RND_MSG);
+//        coordinatorCrashPhases.add(Coordinator.CrashDuring2PC.CrashDuringVote.RND_MSG);
         coordinatorCrashPhases.add(Coordinator.CrashDuring2PC.CrashDuringVote.ZERO_MSG);
         coordinatorCrashPhases.add(Coordinator.CrashDuring2PC.CrashDuringDecision.ALL_MSG);
-        coordinatorCrashPhases.add(Coordinator.CrashDuring2PC.CrashDuringDecision.RND_MSG);
+//        coordinatorCrashPhases.add(Coordinator.CrashDuring2PC.CrashDuringDecision.RND_MSG);
         coordinatorCrashPhases.add(Coordinator.CrashDuring2PC.CrashDuringDecision.ZERO_MSG);
 
         for (int i = 0; i < N_COORDINATORS; i++)
@@ -107,11 +107,11 @@ public class Main {
 
         /*-- Server crash phases ---------------------------------------------------------*/
         Set<Node.CrashPhase> serverCrashPhases = new HashSet<>();
-        serverCrashPhases.add(Server.CrashBefore2PC.ON_COORD_MSG);
-        serverCrashPhases.add(Server.CrashDuring2PC.CrashDuringVote.NO_VOTE);
-        serverCrashPhases.add(Server.CrashDuring2PC.CrashDuringVote.AFTER_VOTE);
+//        serverCrashPhases.add(Server.CrashBefore2PC.ON_COORD_MSG);
+//        serverCrashPhases.add(Server.CrashDuring2PC.CrashDuringVote.NO_VOTE);
+//        serverCrashPhases.add(Server.CrashDuring2PC.CrashDuringVote.AFTER_VOTE);
         serverCrashPhases.add(Server.CrashDuring2PC.CrashDuringTermination.ALL_REPLY);
-        serverCrashPhases.add(Server.CrashDuring2PC.CrashDuringTermination.RND_REPLY);
+//        serverCrashPhases.add(Server.CrashDuring2PC.CrashDuringTermination.RND_REPLY);
         serverCrashPhases.add(Server.CrashDuring2PC.CrashDuringTermination.NO_REPLY);
 
         for (int i = 0; i < N_SERVER; i++)

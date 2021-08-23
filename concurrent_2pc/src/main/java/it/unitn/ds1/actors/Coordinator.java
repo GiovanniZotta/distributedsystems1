@@ -88,7 +88,7 @@ public class Coordinator extends Node {
     }
 
     boolean hasDecided(Transaction transaction) {
-        return transaction2decision.get(transaction) != null;
+        return transaction == null || transaction2decision.get(transaction) != null;
     }
 
     // fix the final decision of the current node
@@ -236,47 +236,54 @@ public class Coordinator extends Node {
     }
 
     public void onReadMsg(ClientCoordinatorMessage.ReadMsg msg) {
-        if(Main.COORD_DEBUG_READ){
-            print("READING KEY " + msg.key);
-        }
         CoordinatorTransaction transaction = client2transaction.get(getSender());
-        if (isCurrentTransaction(transaction, msg)) {
-            int key = msg.key;
-            int serverId = key / Server.DB_SIZE;
-            try {
-                trackServerForTxn(transaction, serverId);
-                sendMessage(servers.get(serverId), new CoordinatorServerMessage.TransactionRead(transaction, key), true);
-            } catch (CrashException e){
+        if(!hasDecided(transaction)){
+            if(Main.COORD_DEBUG_READ){
+                print("READING KEY " + msg.key);
+            }
+            if (isCurrentTransaction(transaction, msg)) {
+                int key = msg.key;
+                int serverId = key / Server.DB_SIZE;
+                try {
+                    trackServerForTxn(transaction, serverId);
+                    sendMessage(servers.get(serverId), new CoordinatorServerMessage.TransactionRead(transaction, key), true);
+                } catch (CrashException e){
+                }
             }
         }
     }
 
     public void onTxnReadResponseMsg(CoordinatorServerMessage.TxnReadResponseMsg msg) {
-        unsetTimeout(msg.transaction, getSender());
-        ActorRef c = transaction2client.get(msg.transaction);
-        try{
-            maybeCrash(CrashBefore2PC.ON_SERVER_MSG);
-            sendMessage(c, new ClientCoordinatorMessage.ReadResultMsg(
-                    msg.transaction.getClientId(),
-                    msg.transaction.getNumAttemptedTxn(),
-                    msg.key,
-                    msg.valueRead));
-            if(Main.COORD_DEBUG_READ_RESPONSE)
-                print("REPLYING WITH VALUE " + msg.valueRead + " FOR KEY " + msg.key);
-        } catch (CrashException e) {}
+        if(!hasDecided(msg.transaction)){
+            unsetTimeout(msg.transaction, getSender());
+            ActorRef c = transaction2client.get(msg.transaction);
+            try{
+                maybeCrash(CrashBefore2PC.ON_SERVER_MSG);
+                sendMessage(c, new ClientCoordinatorMessage.ReadResultMsg(
+                        msg.transaction.getClientId(),
+                        msg.transaction.getNumAttemptedTxn(),
+                        msg.key,
+                        msg.valueRead));
+                if(Main.COORD_DEBUG_READ_RESPONSE)
+                    print("REPLYING WITH VALUE " + msg.valueRead + " FOR KEY " + msg.key);
+            } catch (CrashException e) {}
+        }
 
     }
 
     public void onWriteMsg(ClientCoordinatorMessage.WriteMsg msg) {
         CoordinatorTransaction transaction = client2transaction.get(getSender());
-        if (isCurrentTransaction(transaction, msg)) {
-            int key = msg.key;
-            int value = msg.value;
-            int serverId = key / Server.DB_SIZE;
-            try {
-                trackServerForTxn(transaction, serverId);
-                sendMessage(servers.get(serverId), new CoordinatorServerMessage.TransactionWrite(transaction, key, value));
-            } catch (CrashException e) {}
+        if(!hasDecided(transaction)){
+            if (isCurrentTransaction(transaction, msg)) {
+                int key = msg.key;
+                int value = msg.value;
+                int serverId = key / Server.DB_SIZE;
+                try {
+                    trackServerForTxn(transaction, serverId);
+                    sendMessage(servers.get(serverId), new CoordinatorServerMessage.TransactionWrite(transaction, key, value));
+                } catch (CrashException e) {
+                }
+            }
         }
     }
 
@@ -301,16 +308,19 @@ public class Coordinator extends Node {
         CoordinatorTransaction t = getCTfromTransaction(transaction);
         if (t != null && t.hasTimeout(server)) {
             Cancellable to = t.popOldestServerTimeout(server);
-            if (!to.isCancelled()) {
-                if (!to.cancel()) {
-//                    print("ERRORE FORTISSIMO!!!!");
-//                    throw new NullPointerException();
-//                    to.
-                } else {
-                    if(Main.COORD_DEBUG_UNSET_TIMEOUT)
-                        print("UNSET TIMEOUT FOR TRANSACTION " + transaction.getTxnId() + " FOR SERVER " + servers.indexOf(server));
-                }
-            }
+            to.cancel();
+            if(Main.COORD_DEBUG_UNSET_TIMEOUT)
+                print("UNSET TIMEOUT FOR TRANSACTION " + transaction.getTxnId() + " FOR SERVER " + servers.indexOf(server));
+//            if (!to.isCancelled()) {
+//                if (!to.cancel()) {
+////                    print("ERRORE FORTISSIMO!!!!");
+////                    throw new NullPointerException();
+////                    to.
+//                } else {
+//                    if(Main.COORD_DEBUG_UNSET_TIMEOUT)
+//                        print("UNSET TIMEOUT FOR TRANSACTION " + transaction.getTxnId() + " FOR SERVER " + servers.indexOf(server));
+//                }
+//            }
         }
     }
 
