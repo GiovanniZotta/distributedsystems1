@@ -2,13 +2,11 @@ package it.unitn.ds1.messages;
 
 import akka.actor.ActorRef;
 import it.unitn.ds1.actors.Node;
-import it.unitn.ds1.transactions.Transaction;
 
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 public abstract class Message implements Serializable {
 
@@ -16,6 +14,7 @@ public abstract class Message implements Serializable {
     public static class WelcomeMsg extends Message {
         public final Integer maxKey;
         public final List<ActorRef> group;
+
         public WelcomeMsg(int maxKey, List<ActorRef> group) {
             this.maxKey = maxKey;
             this.group = Collections.unmodifiableList(new ArrayList<>(group));
@@ -46,14 +45,6 @@ public abstract class Message implements Serializable {
             this.id = id;
             this.sumOfKeys = sumOfKeys;
             this.numCrashes = new Node.CrashPhaseMap(numCrashes);
-        }
-    }
-
-    public static class CheckerMsg extends Message {
-        public final ActorRef checker;
-
-        public CheckerMsg(ActorRef checker) {
-            this.checker = checker;
         }
     }
 

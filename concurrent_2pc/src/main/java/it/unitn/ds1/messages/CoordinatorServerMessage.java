@@ -3,7 +3,6 @@ package it.unitn.ds1.messages;
 import akka.actor.ActorRef;
 import it.unitn.ds1.transactions.Transaction;
 
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -67,6 +66,7 @@ public abstract class CoordinatorServerMessage extends Message {
             this.key = key;
         }
     }
+
     public static class TransactionRead extends TransactionAction {
         public TransactionRead(Transaction transaction, Integer key) {
             super(transaction, key);

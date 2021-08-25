@@ -6,17 +6,18 @@ import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Cancellable;
 import it.unitn.ds1.Main;
-import it.unitn.ds1.transactions.Transaction;
 import it.unitn.ds1.messages.CoordinatorServerMessage;
 import it.unitn.ds1.messages.Message;
+import it.unitn.ds1.transactions.Transaction;
 import scala.concurrent.duration.Duration;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 public abstract class Node extends AbstractActor {
-    public interface CrashPhase {}
+    public interface CrashPhase {
+    }
+
     public static class CrashPhaseMap extends HashMap<CrashPhase, Integer> {
 
         public CrashPhaseMap() {
@@ -30,7 +31,7 @@ public abstract class Node extends AbstractActor {
         @Override
         public String toString() {
             StringBuilder res = new StringBuilder();
-            for (Entry<CrashPhase, Integer> entry : this.entrySet()){
+            for (Entry<CrashPhase, Integer> entry : this.entrySet()) {
                 res.append(entry.getKey().toString()).append(": ").append(entry.getValue()).append("\n");
             }
             return res.toString();
@@ -44,17 +45,23 @@ public abstract class Node extends AbstractActor {
             return res;
         }
     }
+
     public class CrashException extends Exception {
     }
 
-    protected int id;                           // node ID
-    protected List<ActorRef> servers;      // list of participant nodes
-    protected ActorRef checker;
+    protected int id;                       // node ID
+
+    // remember the decision taken for each transaction
     protected final Map<Transaction, CoordinatorServerMessage.Decision> transaction2decision;
-    protected final Random r;
+    // phases where we may crash
     protected final Set<CrashPhase> crashPhases;
+    // count the number of crashes in each phase
     protected final CrashPhaseMap numCrashes;
+    // transactions that have not been decided yet
     protected final Set<Transaction> pendingTransactions = new HashSet<>();
+    // RNG
+    protected final Random r;
+
 
     public Node(int id, Set<CrashPhase> crashPhases) {
         super();
@@ -65,27 +72,26 @@ public abstract class Node extends AbstractActor {
         r = new Random();
     }
 
-    // abstract method to be implemented in extending classes
-    protected abstract void onRecoveryMsg(CoordinatorServerMessage.RecoveryMsg msg);
+    @Override
+    public Receive createReceive() {
+        // Empty mapping: we'll define it in the inherited classes
+        return receiveBuilder().build();
+    }
 
-    void setGroup(Message.WelcomeMsg sm) {
-        servers = new ArrayList<>();
-        for (ActorRef b : sm.group) {
-            if (!b.equals(getSelf())) {
-
-                // copying all participant refs except for self
-                this.servers.add(b);
-            }
-        }
-        if(Main.NODE_DEBUG_STARTING_SIZE)
-            print("STARTING WITH " + sm.group.size() + " PEER(S)");
+    public Receive crashed() {
+        return receiveBuilder()
+                .match(CoordinatorServerMessage.RecoveryMsg.class, this::onRecoveryMsg)
+                .match(Message.CheckCorrectness.class, this::onCheckCorrectness)
+                .matchAny(msg -> {
+                })
+                .build();
     }
 
     // emulate a crash and a recovery in a given time
-    void crash(int recoverIn, CrashPhase crashPhase) throws CrashException {
+    protected void crash(int recoverIn, CrashPhase crashPhase) throws CrashException {
         getContext().become(crashed());
         numCrashes.put(crashPhase, numCrashes.getOrDefault(crashPhase, 0) + 1);
-        if(Main.NODE_DEBUG_CRASH)
+        if (Main.NODE_DEBUG_CRASH)
             print("CRASH IN PHASE " + crashPhase);
 
         // setting a timer to "recover"
@@ -98,7 +104,8 @@ public abstract class Node extends AbstractActor {
         throw new CrashException();
     }
 
-    void maybeCrash(CrashPhase crashPhase) throws CrashException {
+    // crash with a certain probability if the node was told to crash in this crashPhase
+    protected void maybeCrash(CrashPhase crashPhase) throws CrashException {
         double crash_prob = getClass().equals(Coordinator.class) ? Main.COORD_CRASH_PROBABILITY : Main.SERVER_CRASH_PROBABILITY;
         if (crashPhases.contains(crashPhase) && r.nextDouble() < crash_prob) {
             crash(Main.MIN_RECOVERY_TIME + r.nextInt(Main.MAX_RECOVERY_TIME - Main.MIN_RECOVERY_TIME), crashPhase);
@@ -113,58 +120,20 @@ public abstract class Node extends AbstractActor {
         }
     }
 
-    boolean hasDecided(Transaction transaction) {
-        return transaction2decision.get(transaction) != null;
-    } // has the node decided?
+    protected abstract boolean hasDecided(Transaction transaction);
 
     // a simple logging function
     void print(String s) {
-        if(this.getClass().equals(Server.class)) 
+        if (this.getClass().equals(Server.class))
             System.out.format("Server      %2d: %s\n", id, s);
-        else 
+        else
             System.out.format("Coordinator %2d: %s\n", id, s);
     }
 
-    @Override
-    public Receive createReceive() {
-
-        // Empty mapping: we'll define it in the inherited classes
-        return receiveBuilder().build();
-    }
-
-    public Receive crashed() {
-        return receiveBuilder()
-                .match(CoordinatorServerMessage.RecoveryMsg.class, this::onRecoveryMsg)
-                .match(Message.CheckerMsg.class, this::onCheckerMsg)
-                .match(Message.CheckCorrectness.class, this::onCheckCorrectness)
-                .matchAny(msg -> {
-                })
-                .build();
-    }
-
-    private void onCheckerMsg(Message.CheckerMsg msg){
-        this.checker = msg.checker;
-    }
-
-    public void onDecisionRequest(CoordinatorServerMessage.DecisionRequest msg) {  /* Decision Request */
-        Transaction transaction = msg.transaction;
-        if (hasDecided(transaction))
-            reply(new CoordinatorServerMessage.DecisionResponse(transaction, transaction2decision.get(transaction)));
-
-        // just ignoring if we don't know the decision
-    }
-
-    public abstract void onCheckCorrectness(Message.CheckCorrectness msg);
-
-
+    // send a message to 'to'
     protected void sendMessage(ActorRef to, Message msg) {
+        // simulate network delay
         Integer delay = r.nextInt(Main.MAX_NODE_DELAY);
-//        getContext().system().scheduler().scheduleOnce(
-//                Duration.create(delay, TimeUnit.MILLISECONDS),
-//                to,
-//                msg,
-//                getContext().system().dispatcher(), getSelf()
-//        );
         try {
             Thread.sleep(delay);
             to.tell(msg, getSelf());
@@ -177,7 +146,7 @@ public abstract class Node extends AbstractActor {
         sendMessage(getSender(), msg);
     }
 
-
+    // schedule a timeout for the transaction and return it
     protected Cancellable newTimeout(int time, Transaction transaction) {
         return getContext().system().scheduler().scheduleOnce(
                 Duration.create(time, TimeUnit.MILLISECONDS),
@@ -187,14 +156,8 @@ public abstract class Node extends AbstractActor {
         );
     }
 
-    private List<CrashPhase> buildCrashPhases(Class c){
-        return crashPhases
-                .stream()
-                .filter(crashPhase -> crashPhase.getClass().equals(c))
-                .collect(Collectors.toList());
-    }
-
-    CrashPhase getZeroMsgCrashPhase(Class crashPhaseClass){
+    // return, if exists in the given class, a crashPhase before sending any message
+    CrashPhase getZeroMsgCrashPhase(Class crashPhaseClass) {
         if (Coordinator.CrashDuring2PC.CrashDuringVote.class.equals(crashPhaseClass)) {
             return Coordinator.CrashDuring2PC.CrashDuringVote.ZERO_MSG;
         } else if (Coordinator.CrashDuring2PC.CrashDuringDecision.class.equals(crashPhaseClass)) {
@@ -208,7 +171,8 @@ public abstract class Node extends AbstractActor {
         }
     }
 
-    CrashPhase getAllMsgCrashPhase(Class crashPhaseClass){
+    // return, if exists in the given class, a crashPhase before sending all the messages
+    CrashPhase getAllMsgCrashPhase(Class crashPhaseClass) {
         if (Coordinator.CrashDuring2PC.CrashDuringVote.class.equals(crashPhaseClass)) {
             return Coordinator.CrashDuring2PC.CrashDuringVote.ALL_MSG;
         } else if (Coordinator.CrashDuring2PC.CrashDuringDecision.class.equals(crashPhaseClass)) {
@@ -222,7 +186,8 @@ public abstract class Node extends AbstractActor {
         }
     }
 
-    CrashPhase getRndMsgCrashPhase(Class crashPhaseClass){
+    // return, if exists in the given class, a crashPhase before sending a random number of messages
+    CrashPhase getRndMsgCrashPhase(Class crashPhaseClass) {
         if (Coordinator.CrashDuring2PC.CrashDuringVote.class.equals(crashPhaseClass)) {
             return Coordinator.CrashDuring2PC.CrashDuringVote.RND_MSG;
         } else if (Coordinator.CrashDuring2PC.CrashDuringDecision.class.equals(crashPhaseClass)) {
@@ -233,4 +198,19 @@ public abstract class Node extends AbstractActor {
             return null;
         }
     }
+
+    // abstract method to be implemented in extending classes
+    protected abstract void onRecoveryMsg(CoordinatorServerMessage.RecoveryMsg msg);
+
+
+    // on termination protocol answer if the decision is known
+    public void onDecisionRequest(CoordinatorServerMessage.DecisionRequest msg) {  /* Decision Request */
+        Transaction transaction = msg.transaction;
+        if (hasDecided(transaction))
+            reply(new CoordinatorServerMessage.DecisionResponse(transaction, transaction2decision.get(transaction)));
+        // just ignore if we don't know the decision
+    }
+
+    public abstract void onCheckCorrectness(Message.CheckCorrectness msg);
+
 }

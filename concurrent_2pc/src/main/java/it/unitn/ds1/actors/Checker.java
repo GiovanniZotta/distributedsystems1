@@ -3,27 +3,26 @@ package it.unitn.ds1.actors;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
-import it.unitn.ds1.Main;
-import it.unitn.ds1.transactions.Transaction;
-import it.unitn.ds1.messages.CoordinatorServerMessage;
 import it.unitn.ds1.messages.Message;
-import scala.concurrent.duration.Duration;
 
-import java.io.Serializable;
-import java.util.*;
-import java.util.concurrent.TimeUnit;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 
-/*-- Participant -----------------------------------------------------------*/
 public class Checker extends AbstractActor {
+    // number of coordinators and servers that have answered
     private Integer counterCoordinators;
     private Integer counterServers;
-    private Integer partialSum;
     private Set<ActorRef> coordinators;
     private Set<ActorRef> servers;
+    // information collected from coordinators and servers that have answered
+    private Integer partialSum;
     private final Map<ActorRef, Node.CrashPhaseMap> numServerCrashes;
     private final Map<ActorRef, Node.CrashPhaseMap> numCoordinatorCrashes;
-    public Checker(){
+
+    public Checker() {
         this.counterCoordinators = 0;
         this.counterServers = 0;
         this.partialSum = 0;
@@ -31,8 +30,9 @@ public class Checker extends AbstractActor {
         this.numCoordinatorCrashes = new HashMap<>();
     }
 
-
-    static public Props props() { return Props.create(Checker.class, () -> new Checker()); }
+    static public Props props() {
+        return Props.create(Checker.class, () -> new Checker());
+    }
 
     @Override
     public Receive createReceive() {
@@ -52,11 +52,11 @@ public class Checker extends AbstractActor {
     public void onCheckCorrectness(Message.CheckCorrectness msg) {
 
         System.out.println("CHECKING CORRECTNESS");
-        for(ActorRef coordinator : coordinators){
+        for (ActorRef coordinator : coordinators) {
             coordinator.tell(new Message.CheckCorrectness(), getSelf());
         }
 
-        for(ActorRef server : servers){
+        for (ActorRef server : servers) {
             server.tell(new Message.CheckCorrectness(), getSelf());
         }
 
@@ -67,9 +67,11 @@ public class Checker extends AbstractActor {
     }
 
     private void manageServer(Message.CheckCorrectnessResponse msg) throws InterruptedException {
+        // manage info message from the server
         partialSum += msg.sumOfKeys;
         counterServers++;
         numServerCrashes.put(getSender(), msg.numCrashes);
+        // when every server answered, print a summary of the information
         if (counterServers == servers.size()) {
             System.out.println("/---- SERVER CRASHES ----/");
             printCrashes(numServerCrashes);
@@ -83,18 +85,20 @@ public class Checker extends AbstractActor {
     }
 
     private void manageCoordinator(Message.CheckCorrectnessResponse msg) throws InterruptedException {
+        // manage info message from the coordinator
         counterCoordinators++;
         numCoordinatorCrashes.put(getSender(), msg.numCrashes);
+        // when every coordinator answered, print a summary of the information
         if (counterCoordinators == coordinators.size()) {
             System.out.println("/---- COORDINATOR CRASHES ----/");
             printCrashes(numCoordinatorCrashes);
         }
     }
 
-    public void onCheckCorrectnessResponse (Message.CheckCorrectnessResponse msg) throws InterruptedException {
-        if (coordinators.contains(getSender())){
+    public void onCheckCorrectnessResponse(Message.CheckCorrectnessResponse msg) throws InterruptedException {
+        if (coordinators.contains(getSender())) {
             manageCoordinator(msg);
-        } else if (servers.contains(getSender())){
+        } else if (servers.contains(getSender())) {
             manageServer(msg);
         }
     }

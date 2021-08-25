@@ -1,9 +1,6 @@
 package it.unitn.ds1.transactions;
 
 
-import akka.actor.Cancellable;
-import akka.util.Timeout;
-
 import java.util.AbstractMap;
 import java.util.Map;
 

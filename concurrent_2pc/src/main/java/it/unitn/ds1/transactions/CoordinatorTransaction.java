@@ -2,10 +2,8 @@ package it.unitn.ds1.transactions;
 
 import akka.actor.ActorRef;
 import akka.actor.Cancellable;
-import scala.collection.mutable.MultiMap;
 
 import java.util.*;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class CoordinatorTransaction extends Transaction {

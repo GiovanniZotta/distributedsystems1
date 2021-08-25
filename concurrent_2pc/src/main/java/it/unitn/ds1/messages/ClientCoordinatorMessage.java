@@ -1,7 +1,5 @@
 package it.unitn.ds1.messages;
 
-import java.io.Serializable;
-
 public abstract class ClientCoordinatorMessage extends Message {
     public final Integer clientId;
     public final Integer numAttemptedTxn;
