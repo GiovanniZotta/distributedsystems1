@@ -1,8 +1,9 @@
 # Concurrent 2-PC
+
 1. The client *A* initiates a transaction *T* involving *r* resources by sending a *TXN_BEGIN* message to a random coordinator *C* (which assigns an ID to *T*).
 2. The coordinator *C* sends a confirmations to *A*. If *A* does not receive the confirmation after a timeout, it retries after some time.
 3. *A* sends R/W operations of the transaction to *C*, which forwards them to the server holding the resources. When a server receives a R/W operation related to *T*, it creates a private workspace for *T* if it does not already exist and applies the changes (W) or returns the value (R) and stores the version of the resource when it is accessed first.
-4. The client sends a *TXN_COMMIT* or *TXN_ABORT* message to *C* which starts a 2-PC session with the servers involved in the transaction.
+4. The client sends a *TXN_END(***COMMIT***)* or *TXN_END(***ABORT***)* message to *C* which starts a 2-PC session with the servers involved in the transaction.
 5. *C* sends a vote requests to the servers, which decide to abort or commit. The coordinator sends to each server the list of resources in the transaction that are related to that server only. 
     * The server decides to vote **COMMIT** if all the current versions are equal to the ones stored in the private workspace of *T*. Each server keeps a record of all the resources for which it voted **COMMIT** during a validation (not terminated yet). If any of the resources asked by the coordinator is involved in this list, then it votes **ABORT**.
     * The server decides to abort if any resource version is outdated.
@@ -69,5 +70,6 @@ SERVER: **abort after a timeout**
   * VALUE is the last value read/written
   * CHANGED is a boolean
 
-### Reliable network
+### Assumptions
+We assume reliable and FIFO channels, and that the actors may crash and recover after some time.
 We assume that our timeout are much larger than the network propagation speed.
