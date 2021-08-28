@@ -37,13 +37,9 @@ public abstract class Transaction implements Cloneable {
     }
 
 
-//    @Override
-//    public Object clone() {
-//        return new Transaction(txnId.getKey(), txnId.getValue());
-//    }
-
+    // avoid someone modifies the entry
     public Map.Entry<Integer, Integer> getTxnId() {
-        return txnId;
+        return new AbstractMap.SimpleEntry<>(txnId);
     }
 
     public State getState() {
