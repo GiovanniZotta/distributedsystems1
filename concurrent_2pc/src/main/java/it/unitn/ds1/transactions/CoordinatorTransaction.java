@@ -6,7 +6,7 @@ import akka.actor.Cancellable;
 import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
 
-public class CoordinatorTransaction extends Transaction {
+public class CoordinatorTransaction extends Transaction.ModifiableTransaction {
     private final ActorRef client;
     private final Set<ActorRef> servers;
     private final Set<ActorRef> yesVoters;

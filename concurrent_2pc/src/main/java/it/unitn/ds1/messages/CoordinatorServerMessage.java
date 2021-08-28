@@ -18,7 +18,7 @@ public abstract class CoordinatorServerMessage extends Message {
 
 
     public CoordinatorServerMessage(Transaction transaction) {
-        this.transaction = (Transaction) transaction.clone();
+        this.transaction = new Transaction.UnmodifiableTransaction(transaction);
     }
 
     public static class VoteRequest extends CoordinatorServerMessage {

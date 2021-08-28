@@ -44,6 +44,7 @@ public abstract class Message implements Serializable {
         public CheckCorrectnessResponse(Integer id, Integer sumOfKeys, Node.CrashPhaseMap numCrashes) {
             this.id = id;
             this.sumOfKeys = sumOfKeys;
+            // it is sufficient to copy because we have only one checker
             this.numCrashes = new Node.CrashPhaseMap(numCrashes);
         }
     }

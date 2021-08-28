@@ -5,7 +5,7 @@ import akka.actor.Cancellable;
 
 import java.util.List;
 
-public class ServerTransaction extends Transaction {
+public class ServerTransaction extends Transaction.ModifiableTransaction {
 
     private final Workspace workspace;
     private ActorRef coordinator;

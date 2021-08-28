@@ -4,15 +4,13 @@ package it.unitn.ds1.transactions;
 import java.util.AbstractMap;
 import java.util.Map;
 
-public class Transaction implements Cloneable {
-    public enum State {INIT, READY, DECIDED}
+public abstract class Transaction implements Cloneable {
 
     private final Map.Entry<Integer, Integer> txnId;
     private State state;
 
     public Transaction(Integer clientId, Integer numAttemptedTxn) {
         this.txnId = new AbstractMap.SimpleEntry<>(clientId, numAttemptedTxn);
-        state = State.INIT;
     }
 
     public Integer getClientId() {
@@ -22,6 +20,8 @@ public class Transaction implements Cloneable {
     public Integer getNumAttemptedTxn() {
         return txnId.getValue();
     }
+
+    public enum State {INIT, READY, DECIDED}
 
     @Override
     public boolean equals(Object o) {
@@ -37,10 +37,10 @@ public class Transaction implements Cloneable {
     }
 
 
-    @Override
-    public Object clone() {
-        return new Transaction(txnId.getKey(), txnId.getValue());
-    }
+//    @Override
+//    public Object clone() {
+//        return new Transaction(txnId.getKey(), txnId.getValue());
+//    }
 
     public Map.Entry<Integer, Integer> getTxnId() {
         return txnId;
@@ -50,8 +50,31 @@ public class Transaction implements Cloneable {
         return state;
     }
 
-    public void setState(State state) {
-        this.state = state;
+    // the state is final
+    public static class UnmodifiableTransaction extends Transaction {
+        private final State state;
+
+        public UnmodifiableTransaction(Transaction t) {
+            super(t.getClientId(), t.getNumAttemptedTxn());
+            this.state = t.state;
+        }
     }
+    // the state can be modified
+    public static  class ModifiableTransaction extends Transaction {
+        protected State state;
+
+        public ModifiableTransaction(Integer clientId, Integer numAttemptedTxn) {
+            super(clientId, numAttemptedTxn);
+            this.state = State.INIT;
+        }
+
+        public void setState(State state) {
+            this.state = state;
+        }
+    }
+
+
+
+
 
 }
