@@ -7,7 +7,6 @@ import java.util.Map;
 public abstract class Transaction implements Cloneable {
 
     private final Map.Entry<Integer, Integer> txnId;
-    private State state;
 
     public Transaction(Integer clientId, Integer numAttemptedTxn) {
         this.txnId = new AbstractMap.SimpleEntry<>(clientId, numAttemptedTxn);
@@ -42,9 +41,7 @@ public abstract class Transaction implements Cloneable {
         return new AbstractMap.SimpleEntry<>(txnId);
     }
 
-    public State getState() {
-        return state;
-    }
+    public abstract State getState();
 
     // the state is final
     public static class UnmodifiableTransaction extends Transaction {
@@ -52,7 +49,12 @@ public abstract class Transaction implements Cloneable {
 
         public UnmodifiableTransaction(Transaction t) {
             super(t.getClientId(), t.getNumAttemptedTxn());
-            this.state = t.state;
+            this.state = t.getState();
+        }
+
+        @Override
+        public State getState() {
+            return state;
         }
     }
     // the state can be modified
@@ -63,14 +65,13 @@ public abstract class Transaction implements Cloneable {
             super(clientId, numAttemptedTxn);
             this.state = State.INIT;
         }
-
+        @Override
+        public State getState() {
+            return state;
+        }
         public void setState(State state) {
             this.state = state;
         }
     }
-
-
-
-
 
 }

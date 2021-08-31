@@ -4,6 +4,7 @@ import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import it.unitn.ds1.actors.*;
 import it.unitn.ds1.messages.Message;
+import it.unitn.ds1.transactions.Transaction;
 import scala.concurrent.duration.Duration;
 
 import java.io.IOException;
